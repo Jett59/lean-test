@@ -463,11 +463,25 @@ theorem zero_sub (m : MyNat) : 0-m = 0 := by
   | zero => rfl
   | succ k ih => exact show 0-k.succ = pred 0 by rw [sub_succ, ih]
 
+theorem sub_one (m : MyNat) : m-1 = m.pred := rfl
+
+theorem sub_lt (a b c : MyNat) (h : a < b) : a-c < b := match c with
+  | zero => h
+  | succ k =>
+    have ih : a-k < b := sub_lt a b k h
+    pred_lt (a-k) b ih
+
+theorem sub_le (a b c : MyNat) (h : a ≤ b) : a-c ≤ b := match c with
+  | zero => h
+  | succ k =>
+    have ih : a-k ≤ b := sub_le a b k h
+    pred_le (a-k) b ih
+
 theorem sub_not_zero (m n : MyNat) (h₁ : m > n) : m-n ≠ 0 :=
   have h₂ : m ≠ n := (lt_eq n m h₁).symm
   match n with
   | zero => h₂
   | succ k =>
     have h₃ : m > k := pred_lt k.succ m h₁
-have ih : m-k ≠ 0 := sub_not_zero m k h₃
-sorry
+    have ih : m-k ≠ 0 := sub_not_zero m k h₃
+    sorry
