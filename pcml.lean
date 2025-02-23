@@ -9,7 +9,7 @@ instance {α : Sort u} : CoeSort (Set α) (Sort max u 1) where
   coe s := { x : α // s.predicate x}
 
 instance {α : Type u} : EmptyCollection (Set α) where
-  emptyCollection := Set.mk (fun x => x ≠ x)
+  emptyCollection := Set.mk (fun _ => False)
 
 instance {α : Type u} : Singleton α (Set α) where
   singleton x := Set.mk (fun y => y = x)
@@ -22,6 +22,12 @@ instance {α : Type u} : Membership α (Set α) where
 
 instance {α : Type u} : HasSubset (Set α) where
   Subset a b := ∀ x : a, x.val ∈ b
+
+instance {α : Type u} : Union (Set α) where
+  union S T := Set.mk (fun x => S.predicate x ∨ T.predicate x)
+
+instance {α : Type u} : Inter (Set α) where
+  inter S T := Set.mk (fun x => S.predicate x ∧ T.predicate x)
 
 namespace Set
 variable {α : Type u}
@@ -37,6 +43,8 @@ theorem setext (a b : Set α) : (∀ x : α, x ∈ a ↔ x ∈ b) → a = b := b
     intro x
     apply propext
     exact h x
+
+def All (α : Type u) : Set α := Set.mk (fun _ => True)
 
 theorem empty_insert (x : α) : insert x (∅ : Set α) = {x} := by
     apply setext
@@ -87,7 +95,118 @@ theorem member_subset (A : Set α) (x : α) (h : x ∈ A) : {x} ⊆ A := by
 
 theorem empty_subset {A : Set α} : ∅ ⊆ A := by
     intro x
-    exact absurd rfl x.property
+    exact False.elim x.property
+
+theorem insert_member {A : Set α} {x : A} : insert x.val A = A := by
+    apply setext
+    intro y
+    apply Iff.intro
+    . intro h
+      apply Or.elim h
+      . intro h; exact Eq.subst h.symm x.property
+      . intro; assumption
+    . exact Or.inr
+
+theorem subset_union_left {S T : Set α} : S ⊆ (S ∪ T) := fun x => Or.inl x.property
+theorem subset_union_right {S T : Set α} : T ⊆ (S ∪ T) := fun x => Or.inr x.property
+
+theorem insert_as_union (S : Set α) (x : α) : insert x S = {x} ∪ S := rfl
+
+theorem union_subset (S T U : Set α) (h₁ : S ⊆ U) (h₂ : T ⊆ U) : (S ∪ T) ⊆ U := by
+    intro x
+    apply Or.elim x.property
+    . intro h; exact h₁ ⟨x.val, h⟩
+    . intro h; exact h₂ ⟨x.val, h⟩
+
+theorem intersection_subset_left (S T : Set α) : (S ∩ T) ⊆ S := fun x => x.property.left
+theorem intersection_subset_right (S T : Set α) : (S ∩ T) ⊆ T := fun x => x.property.right
+
+inductive Finite.{u} : Set α → Type u where
+    | Empty : Finite ∅
+    | Singleton (x : α) : Finite {x}
+    | Union {S T : Set α} : Finite S → Finite T → Finite (S ∪ T)
+    | Intersection {S T : Set α} : Finite S → Finite T → Finite (S ∩ T)
+
+def FiniteProp (S : Set α) := ∃ _ : Finite S, True
+
+namespace FiniteProp
+def Empty : FiniteProp (∅ : Set α) := ⟨Finite.Empty, trivial⟩
+def Singleton (x : α) : FiniteProp {x} := ⟨Finite.Singleton x, trivial⟩
+def Union {S T : Set α} : FiniteProp S → FiniteProp T → FiniteProp (S ∪ T) := (⟨Finite.Union ·.choose ·.choose, trivial⟩)
+def Intersection {S T : Set α} : FiniteProp S → FiniteProp T → FiniteProp (S ∩ T) := (⟨Finite.Intersection ·.choose ·.choose, trivial⟩)
+end FiniteProp
+
+def equalCardinality {α : Type u} {β : Type v} (S : Set α) (T : Set β) : Prop :=   ∃ f : S → T, (∀ x₁ x₂, f x₁ = f x₂ → x₁ = x₂) ∧ (∀ y, ∃ x, f x = y)
+
+theorem equal_cardinality_refl {S : Set α} : equalCardinality S S := ⟨id, fun _ _ h => h, fun x => ⟨x, rfl⟩⟩
+theorem equal_cardinality_symm {S : Set α} {T : Set β} (h : equalCardinality S T) : equalCardinality T S := by
+  have ⟨f, h₁, h₂⟩ := h
+  let g : T → S := fun y => (h₂ y).choose
+  have h₃ : ∀ y : T, f (g y) = y := fun y => (h₂ y).choose_spec
+  apply Exists.intro g
+  constructor
+  . intro y₁ y₂ h₄
+    rw [←h₃ y₁, ←h₃ y₂]
+    exact congrArg f h₄
+  . intro x
+    apply Exists.intro (f x)
+    have h₅ : f (g (f x)) = f x := h₃ (f x)
+    exact h₁ (g (f x)) x h₅
+
+theorem equal_cardinality_trans {S : Set α} {T : Set β} {U : Set γ} (h'₁ : equalCardinality S T) (h'₂ : equalCardinality T U) : equalCardinality S U := by
+  have ⟨f, h₁₁, h₁₂⟩ := h'₁
+  have ⟨g, h₂₁, h₂₂⟩ := h'₂
+  let h := g ∘ f
+  apply Exists.intro h
+  constructor
+  . intro x₁ x₂ h₃
+    have h₄ : f x₁ = f x₂ := h₂₁ (f x₁) (f x₂) h₃
+    exact h₁₁ x₁ x₂ h₄
+  . intro z
+    have ⟨y, h₅⟩ : ∃ y : T, g y = z := h₂₂ z
+    have ⟨x, h₆⟩ : ∃ x : S, f x = y := h₁₂ y
+    have h₇ : g (f x) = z := Eq.subst (motive := fun a => g a = z) h₆.symm h₅
+    exact ⟨x, h₇⟩
+
+def Countable (S : Set α) : Prop := ∃ f : S → Nat, ∀ x₁ x₂ : S, f x₁ = f x₂ → x₁ = x₂
+
+theorem any_natural_numbers_countable (S : Set Nat) : Countable S := by
+  let f : S → Nat := fun x => x.val
+  apply Exists.intro f
+  intro x₁ x₂
+  unfold f
+  intro h
+  exact Subtype.eq h
+
+def max_of_finite_nats {S : Set Nat} (f : Finite S) : Nat := match f with
+  | Finite.Empty => 0
+  | Finite.Singleton x => x
+  | Finite.Union A B => max (max_of_finite_nats A) (max_of_finite_nats B)
+  | Finite.Intersection A B => max (max_of_finite_nats A) (max_of_finite_nats B)
+
+
+theorem max_of_finite_nats_ge_all {S : Set Nat} (f : Finite S) : ∀ n : S, max_of_finite_nats f ≥ n := match f with
+  | Finite.Empty => fun x => False.elim x.property
+  | Finite.Singleton x => fun y => Eq.subst y.property.symm (Nat.le_refl x)
+  | Finite.Union A B => fun x =>
+  have h₁ : max_of_finite_nats A ≥ x ∨ max_of_finite_nats B ≥ x := Or.elim x.property (fun h => Or.inl (max_of_finite_nats_ge_all A ⟨x, h⟩)) (fun h => Or.inr (max_of_finite_nats_ge_all B ⟨x, h⟩))
+  have h₂ : max_of_finite_nats (Finite.Union A B) ≥ max_of_finite_nats A := Nat.le_max_left (max_of_finite_nats A) (max_of_finite_nats B)
+  have h₃ : max_of_finite_nats (Finite.Union A B) ≥ max_of_finite_nats B := Nat.le_max_right (max_of_finite_nats A) (max_of_finite_nats B)
+  Or.elim h₁ (fun h => Nat.le_trans h h₂) (fun h => Nat.le_trans h h₃)
+  | Finite.Intersection A B => fun x =>
+  have h₁ : max_of_finite_nats A ≥ x := max_of_finite_nats_ge_all A ⟨x, x.property.left⟩
+  have h₂ : max_of_finite_nats (Finite.Intersection A B) ≥ max_of_finite_nats A := Nat.le_max_left (max_of_finite_nats A) (max_of_finite_nats B)
+  Nat.le_trans h₁ h₂
+
+theorem natural_numbers_infinite : ¬FiniteProp (All Nat) := by
+    intro finite
+    let max_nat := max_of_finite_nats finite.choose
+    have h₀ : ∀n : (All Nat), max_nat ≥ n := max_of_finite_nats_ge_all finite.choose
+    let not_present := max_nat + 1
+    have h₁ : ∀ n : (All Nat), not_present > n := fun n => Nat.lt_succ_of_le (h₀ n)
+    have h₂ : ∀ n : (All Nat), not_present ≠ n := fun n => Nat.ne_iff_lt_or_gt.mpr (Or.inr (h₁ n))
+    have h₃ : not_present ∉ All Nat := fun h => h₂ ⟨not_present, h⟩ rfl
+    exact h₃ trivial
 end Set
 
 namespace propositional
@@ -140,6 +259,8 @@ def is_subformula (a b : Proposition) : Prop := a = b ∨ match b with
     | Atomic _ => False
     | Not c => a.is_subformula c
     | Implies c d => a.is_subformula c ∨ a.is_subformula d
+
+--theorem propositions_countable : Set.countable (Set.all Proposition) :=
 end Proposition
 
 inductive TruthValue where
@@ -408,7 +529,7 @@ def satisfiable_set (A : Set Proposition) : Prop := ∃ u : Valuation, ∀ p : A
 
 theorem satisfies_empty (u : Valuation) : u.satisfies_set ∅ := by
     intro (p : (∅ : Set Proposition))
-    have : p.val ≠ p.val := p.property
+    have : False := p.property
     contradiction
 
 theorem p2_5_tautology (p : Proposition) : Tautology (p.Or p.Not) := by
@@ -546,6 +667,16 @@ theorem satisfiable_entails_contradiction (A : Set Proposition) : satisfiable_se
         contradiction
       have h₆ : u.satisfies_set A := byContradiction fun h'₀ => h₅ (fun h'₁ => absurd h'₁ h'₀)
       exact ⟨u, h₆⟩
+
+theorem p_implies_p_tautology (p : Proposition) : Tautology (p.Implies p) := by
+      show Tautology (p.Implies p)
+      intro u
+      let vp := u p
+      calc u (p.Implies p)
+        _ = vp.Implies vp := u.implication p p
+        _ = TruthValue.True := match vp with
+        | TruthValue.True => rfl
+        | TruthValue.False => rfl
 end Valuation
 
 -- I would make this a Prop (see Deduction.proves), but you apparently can't do structural recursion on a Prop
@@ -614,7 +745,7 @@ theorem A2_proves {A : Set Proposition} {p q r : Proposition} : A ⊢ ((p.Implie
 theorem A3_proves {A : Set Proposition} {p q : Proposition} : A ⊢ ((q.Not.Implies p.Not).Implies ((q.Not.Implies p).Implies q)) := ⟨A3, trivial⟩
 theorem Mp_proves {A : Set Proposition} {p q : Proposition} (p₁ : A ⊢ p) (p₂ : A ⊢ p.Implies q) :  A ⊢ q := ⟨Mp p₁.choose p₂.choose, trivial⟩
 
-theorem subset_proves (p : Proposition) (A B : Set Proposition) : A ⊆ B → Deduction A p → B ⊢ p := by
+theorem subset_proves {p : Proposition} {A B : Set Proposition} : A ⊆ B → Deduction A p → B ⊢ p := by
     intro h₁
     intro d₁
     match d₁ with
@@ -622,7 +753,7 @@ theorem subset_proves (p : Proposition) (A B : Set Proposition) : A ⊆ B → De
     | A1 => exact A1_proves
     | A2 => exact A2_proves
     | A3 => exact A3_proves
-    | @Mp A p q d'₁ d'₂ => exact Mp_proves (subset_proves p A B h₁ d'₁) (subset_proves (p.Implies q) A B h₁ d'₂)
+    | @Mp A p q d'₁ d'₂ => exact Mp_proves (subset_proves h₁ d'₁) (subset_proves h₁ d'₂)
 
 theorem deduction_trans (p : Proposition) (A B : Set Proposition) : (∀ b : B, A ⊢ b) → Deduction B p → A ⊢ p := by
     intro h₁
@@ -658,14 +789,29 @@ theorem _deduction_theorem_reverse {A : Set Proposition} {p q : Proposition} (d 
 theorem deduction_theorem {A : Set Proposition} {p q : Proposition} : A ⊢ p.Implies q ↔ (insert p A) ⊢ q := by
     apply Iff.intro
     . intro h₁
-      have h₂ : (insert p A) ⊢ p.Implies q := subset_proves (p.Implies q) A (insert p A) (Set.insert_subset p A) h₁.choose
+      have h₂ : (insert p A) ⊢ p.Implies q := subset_proves (Set.insert_subset p A) h₁.choose
       have h₃ : (insert p A) ⊢ p := Premiss_proves (Or.inl rfl)
       exact Mp_proves h₃ h₂
     . intro d₁
       exact _deduction_theorem_reverse d₁.choose
+
+theorem double_negation_elimination {A : Set Proposition} {p : Proposition} (h : A ⊢ p.Not.Not) : A ⊢ p :=
+    have h₁ : A ⊢ (p.Not.Implies p.Not.Not).Implies ((p.Not.Implies p.Not).Implies p) := A3_proves
+    have h₂ : A ⊢ p.Not.Implies p.Not.Not := p_implies_provable h
+    have h₃ : A ⊢ (p.Not.Implies p.Not).Implies p := Mp_proves h₂ h₁
+    Mp_proves p_implies_p h₃
+
+theorem double_negation_elimination_implication {A : Set Proposition} {p : Proposition} : A ⊢ p.Not.Not.Implies p := deduction_theorem.mpr (double_negation_elimination (Premiss_proves (Or.inl rfl)))
+
+theorem implication_trans {A : Set Proposition} {p q r : Proposition} (h₁ : A ⊢ p.Implies q) (h₂ : A ⊢ q.Implies r) : A ⊢ p.Implies r :=
+    have h₃ : (insert p A) ⊢ q := deduction_theorem.mp h₁
+    have h₄ : (insert p A) ⊢ q.Implies r := subset_proves (Set.insert_subset p A) h₂.choose
+    have h₅ : (insert p A) ⊢ r := Mp_proves h₃ h₄
+    deduction_theorem.mpr h₅
 end Deduction
 
 namespace SoundAndComplete
+open Set
 open Proposition
 open Valuation
 open Deduction
@@ -688,7 +834,7 @@ theorem sound {A : Set Proposition} {p : Proposition} : Deduction A p → A ⊧ 
 def inconsistent (A : Set Proposition) : Prop := ∃ p : Proposition, A ⊢ (p.Implies p).Not
 def consistent (A : Set Proposition) : Prop := ¬ inconsistent A
 
-theorem satisfiable_consistent (A : Set Proposition) : satisfiable_set A → consistent A := by
+theorem satisfiable_consistent {A : Set Proposition} : satisfiable_set A → consistent A := by
     intro h₁
     intro ⟨p, h₂⟩
     have h₃ : A ⊧ (p.Implies p).Not := sound h₂.choose
@@ -696,18 +842,144 @@ theorem satisfiable_consistent (A : Set Proposition) : satisfiable_set A → con
     apply h₄
     apply Exists.intro (p.Implies p).Not
     constructor
-    . show Contradiction (p.Implies p).Not
-      intro u
-      intro (h₅ : u.satisfies (p.Implies p).Not)
-      let vp := u p
-      have h₆ : (vp.Implies vp).Not = TruthValue.True := calc (vp.Implies vp).Not
-        _ = (u (p.Implies p)).Not := by rw [u.implication p p]
-        _ = u (p.Implies p).Not := (u.negation (p.Implies p)).symm
-        _ = TruthValue.True := h₅
-      have h₇ : TruthValue.False = TruthValue.True := match vp with
-        | TruthValue.True => h₆
-        | TruthValue.False => h₆
-      injection h₇
+    . exact (tautology_contradiction (p.Implies p)).mp (Valuation.p_implies_p_tautology p)
     . exact h₃
+
+theorem generalised_explosion {A : Set Proposition} {p q : Proposition} (h₁ : A ⊢ p) (h₂ : A ⊢ p.Not) : A ⊢ q :=
+    have h₃ : A ⊢ q.Not.Implies p.Not := p_implies_provable h₂
+    have h₄ : A ⊢ q.Not.Implies p := p_implies_provable h₁
+    have h₅ : A ⊢ (q.Not.Implies p.Not).Implies ((q.Not.Implies p).Implies q) := A3_proves
+    have h₆ : A ⊢ (q.Not.Implies p).Implies q := Mp_proves h₃ h₅
+    Mp_proves h₄ h₆
+
+theorem explosion {A : Set Proposition} {p : Proposition} : inconsistent A → A ⊢ p := by
+    intro ⟨a, h₀⟩
+    have h₁ : A ⊢ (p.Not.Implies (a.Implies a).Not).Implies ((p.Not.Implies (a.Implies a)).Implies p) := A3_proves
+    have h₂ : A ⊢ p.Not.Implies (a.Implies a).Not := p_implies_provable h₀
+    have h₃ : A ⊢ (p.Not.Implies (a.Implies a)).Implies p := Mp_proves h₂ h₁
+    exact Mp_proves (p_implies_provable p_implies_p) h₃
+
+theorem inconsistent_finite_subset {A : Set Proposition} : inconsistent A → ∃ B : Set Proposition, B ⊆ A ∧ FiniteProp B ∧ inconsistent B := by
+    intro ⟨p, h₀⟩
+    have ⟨B, h₁⟩ : ∃ B : Set Proposition, B ⊆ A ∧ FiniteProp B ∧ B ⊢ (p.Implies p).Not := recursive (p.Implies p).Not h₀.choose
+    apply Exists.intro B
+    constructor
+    . exact h₁.left
+    . constructor
+      . exact h₁.right.left
+      . exact ⟨p, h₁.right.right⟩
+  where
+    recursive (p : Proposition) (d₀ : Deduction A p) : ∃ B : Set Proposition, B ⊆ A ∧ FiniteProp B ∧ B ⊢ p := match d₀ with
+    | Premiss h => ⟨{p}, fun x => Eq.subst x.property.symm h, FiniteProp.Singleton p, Premiss_proves rfl⟩
+    | A1 => ⟨∅, empty_subset, FiniteProp.Empty, A1_proves⟩
+    | A2 => ⟨∅, empty_subset, FiniteProp.Empty, A2_proves⟩
+    | A3 => ⟨∅, empty_subset, FiniteProp.Empty, A3_proves⟩
+    | @Mp A p q d₁ d₂ =>
+      have ⟨B₁, h₁⟩ : ∃ B₁ : Set Proposition, B₁ ⊆ A ∧ FiniteProp B₁ ∧ B₁ ⊢ p := recursive p d₁
+      have ⟨B₂, h₂⟩ : ∃ B₂ : Set Proposition, B₂ ⊆ A ∧ FiniteProp B₂ ∧ B₂ ⊢ p.Implies q := recursive (p.Implies q) d₂
+      let B := B₁ ∪ B₂
+      have h₃ : B ⊆ A := union_subset B₁ B₂ A h₁.left h₂.left
+      have h₄ : FiniteProp B := FiniteProp.Union h₁.right.left h₂.right.left
+      have h₅ : B ⊢ p := subset_proves subset_union_left h₁.right.right.choose
+      have h₆ : B ⊢ p.Implies q := subset_proves subset_union_right h₂.right.right.choose
+      have h₇ : B ⊢ q := Mp_proves h₅ h₆
+      ⟨B, h₃, h₄, h₇⟩
+
+theorem finite_subsets_consistent {A : Set Proposition} : consistent A ↔ ∀ B : Set Proposition, B ⊆ A → FiniteProp B → consistent B := by
+    apply Iff.intro
+    . intro h₀
+      intro B
+      intro h₁ _h₂ ⟨p, h₃⟩
+      apply h₀
+      apply Exists.intro p
+      show A ⊢ (p.Implies p).Not
+      exact subset_proves h₁ h₃.choose
+    . intro h₀
+      intro h₁
+      have ⟨B, h₂, h₃, h₄⟩ : ∃ B : Set Proposition, B ⊆ A ∧ FiniteProp B ∧ inconsistent B := inconsistent_finite_subset h₁
+      exact h₀ B h₂ h₃ h₄
+
+theorem inconsistent_subset {A B : Set Proposition} (h₀ : A ⊆ B) : inconsistent A → inconsistent B := by
+    intro ⟨p, h₁⟩
+    exact ⟨p, subset_proves h₀ h₁.choose⟩
+
+theorem proves_assumption {A : Set Proposition} {p : Proposition} (h₀ : A ⊢ p) : ∀ q : Proposition, insert p A ⊢ q ↔ A ⊢ q := by
+    intro q
+    apply Iff.intro
+    . intro h₁
+      exact mp_recursion h₀.choose h₁.choose
+    . intro h₁
+      exact subset_proves (insert_subset p A) h₁.choose
+  where
+    mp_recursion {p q : Proposition} (d₁ : Deduction A p) (d₂ : Deduction (insert p A) q) : A ⊢ q := match d₂ with
+    | Premiss h => match h with
+      | Or.inl h => Eq.subst (motive := fun a => A ⊢ a) h.symm ⟨d₁, trivial⟩
+      | Or.inr h => Premiss_proves h
+    | A1 => A1_proves
+    | A2 => A2_proves
+    | A3 => A3_proves
+    | Mp d'₁ d'₂ => Mp_proves (mp_recursion d₁ d'₁) (mp_recursion d₁ d'₂)
+
+def maximallyConsistent (A : Set Proposition) : Prop := consistent A ∧ ∀ p : Proposition, p ∉ A → inconsistent (insert p A)
+
+theorem maximally_consistent_from_valuation {v : Valuation} : maximallyConsistent (Set.mk (fun p => v.satisfies p)) := by
+    let A := Set.mk (fun p => v.satisfies p)
+    constructor
+    . exact satisfiable_consistent ⟨v, fun x => x.property⟩
+    . intro p
+      intro (h₀ : ¬ v.satisfies p)
+      apply Exists.intro p
+      have h₁ : v.satisfies p.Not := (not_definition p).mpr ((TruthValue.not_true (v p)).mp h₀)
+      have h₂ : A ⊢ p.Not := Premiss_proves h₁
+      have h₃ : (insert p A) ⊢ p.Not := subset_proves (insert_subset p A) h₂.choose
+      have h₄ : (insert p A) ⊢ p := Premiss_proves (Or.inl rfl)
+      exact generalised_explosion h₄ h₃
+
+theorem maximally_consistent_proves {A : Set Proposition} {p : Proposition} (h₁ : maximallyConsistent A) (h₂ : A ⊢ p) : p ∈ A := by
+    apply byContradiction
+    intro h₃
+    have ⟨q, h₄⟩ : inconsistent (insert p A) := h₁.right p h₃
+    have h₅ : inconsistent A := ⟨q, (proves_assumption h₂ (q.Implies q).Not).mp h₄⟩
+    exact h₁.left h₅
+
+theorem maximally_consistent_proves_negation {A : Set Proposition} {p : Proposition} (h₀ : maximallyConsistent A) : A ⊢ p.Not ↔ p ∉ A := by
+    apply Iff.intro
+    . intro h₁
+      intro h₂
+      have h₃ : A ⊢ p := Premiss_proves h₂
+      apply h₀.left
+      apply Exists.intro p
+      exact generalised_explosion h₃ h₁
+    . intro h₁
+      have h₂ : inconsistent (insert p A) := h₀.right p h₁
+      have h₃ : (insert p A) ⊢ p.Not := explosion h₂
+      have h₄ : A ⊢ p.Implies p.Not := deduction_theorem.mpr h₃
+      have h₅ : A ⊢ p.Implies p := p_implies_p
+      have h₆ : A ⊢ p.Not.Not.Implies p.Not := implication_trans double_negation_elimination_implication h₄
+      have h₇ : A ⊢ p.Not.Not.Implies p := implication_trans double_negation_elimination_implication h₅
+      have h₈ : A ⊢ (p.Not.Not.Implies p.Not).Implies ((p.Not.Not.Implies p).Implies p.Not) := A3_proves
+      exact Mp_proves h₇ (Mp_proves h₆ h₈)
+
+theorem maximally_consistent_includes_implication {A : Set Proposition} {p q : Proposition} (h : maximallyConsistent A) : p.Implies q ∈ A ↔ p ∉ A ∨ q ∈ A := by
+    apply Iff.intro
+    . intro h₀
+      apply byContradiction
+      intro h₁
+      have h₂ : p ∈ A := not_not.mp (fun h => h₁ (Or.inl h))
+      have h₃ : q ∉ A := fun h => h₁ (Or.inr h)
+      have h₄ : A ⊢ q := Mp_proves (Premiss_proves h₂) (Premiss_proves h₀)
+      exact h₃ (maximally_consistent_proves h h₄)
+    . intro h₀
+      apply Or.elim h₀
+      . intro h₀
+        apply maximally_consistent_proves h
+        have h₁ : A ⊢ p.Not := (maximally_consistent_proves_negation h).mpr h₀
+        have h₂ : (insert p A) ⊢ p := Premiss_proves (Or.inl rfl)
+        have h₃ : (insert p A) ⊢ p.Not := subset_proves (insert_subset p A) h₁.choose
+        have h₄ : (insert p A) ⊢ q := generalised_explosion h₂ h₃
+        exact deduction_theorem.mpr h₄
+      . intro h₀; exact maximally_consistent_proves h (p_implies_provable (Premiss_proves h₀))
+
+--theorem maximally_consistent_superset {A : Set Proposition} (h : consistent A) : ∃ B : Set Proposition, A ⊆ B ∧ maximallyConsistent B := sorry
 end SoundAndComplete
 end propositional
