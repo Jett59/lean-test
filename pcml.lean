@@ -178,35 +178,40 @@ theorem any_natural_numbers_countable (S : Set Nat) : Countable S := by
   intro h
   exact Subtype.eq h
 
-def max_of_finite_nats {S : Set Nat} (f : Finite S) : Nat := match f with
+def max_rank_of_finite {S : Set α} (rank : α → Nat) (f : Finite S) : Nat := match f with
   | Finite.Empty => 0
-  | Finite.Singleton x => x
-  | Finite.Union A B => max (max_of_finite_nats A) (max_of_finite_nats B)
-  | Finite.Intersection A B => max (max_of_finite_nats A) (max_of_finite_nats B)
+  | Finite.Singleton x => rank x
+  | Finite.Union A B => max (max_rank_of_finite rank A) (max_rank_of_finite rank B)
+  | Finite.Intersection A B => max (max_rank_of_finite rank A) (max_rank_of_finite rank B)
 
-
-theorem max_of_finite_nats_ge_all {S : Set Nat} (f : Finite S) : ∀ n : S, max_of_finite_nats f ≥ n := match f with
+theorem max_rank_of_finite_ge_all {S : Set α} (rank : α → Nat) (f : Finite S) : ∀ x : S, max_rank_of_finite rank f ≥ rank x := match f with
   | Finite.Empty => fun x => False.elim x.property
-  | Finite.Singleton x => fun y => Eq.subst y.property.symm (Nat.le_refl x)
+  | Finite.Singleton x => fun y => Eq.subst (congrArg rank y.property.symm) (Nat.le_refl (rank x))
   | Finite.Union A B => fun x =>
-  have h₁ : max_of_finite_nats A ≥ x ∨ max_of_finite_nats B ≥ x := Or.elim x.property (fun h => Or.inl (max_of_finite_nats_ge_all A ⟨x, h⟩)) (fun h => Or.inr (max_of_finite_nats_ge_all B ⟨x, h⟩))
-  have h₂ : max_of_finite_nats (Finite.Union A B) ≥ max_of_finite_nats A := Nat.le_max_left (max_of_finite_nats A) (max_of_finite_nats B)
-  have h₃ : max_of_finite_nats (Finite.Union A B) ≥ max_of_finite_nats B := Nat.le_max_right (max_of_finite_nats A) (max_of_finite_nats B)
+  have h₁ : max_rank_of_finite rank A ≥ rank x ∨ max_rank_of_finite rank B ≥ rank x := Or.elim x.property (fun h => Or.inl (max_rank_of_finite_ge_all rank A ⟨x, h⟩)) (fun h => Or.inr (max_rank_of_finite_ge_all rank B ⟨x, h⟩))
+  have h₂ : max_rank_of_finite rank (Finite.Union A B) ≥ max_rank_of_finite rank A := Nat.le_max_left (max_rank_of_finite rank A) (max_rank_of_finite rank B)
+  have h₃ : max_rank_of_finite rank (Finite.Union A B) ≥ max_rank_of_finite rank B := Nat.le_max_right (max_rank_of_finite rank A) (max_rank_of_finite rank B)
   Or.elim h₁ (fun h => Nat.le_trans h h₂) (fun h => Nat.le_trans h h₃)
   | Finite.Intersection A B => fun x =>
-  have h₁ : max_of_finite_nats A ≥ x := max_of_finite_nats_ge_all A ⟨x, x.property.left⟩
-  have h₂ : max_of_finite_nats (Finite.Intersection A B) ≥ max_of_finite_nats A := Nat.le_max_left (max_of_finite_nats A) (max_of_finite_nats B)
+  have h₁ : max_rank_of_finite rank A ≥ rank x := max_rank_of_finite_ge_all rank A ⟨x, x.property.left⟩
+  have h₂ : max_rank_of_finite rank (Finite.Intersection A B) ≥ max_rank_of_finite rank A := Nat.le_max_left (max_rank_of_finite rank A) (max_rank_of_finite rank B)
   Nat.le_trans h₁ h₂
 
-theorem natural_numbers_infinite : ¬FiniteProp (All Nat) := by
+theorem all_of_inductive_infinite (rank : α → Nat) (of_rank : Nat → α) (h : ∀ n : Nat, rank (of_rank n) = n) : ¬FiniteProp (All α) := by
     intro finite
-    let max_nat := max_of_finite_nats finite.choose
-    have h₀ : ∀n : (All Nat), max_nat ≥ n := max_of_finite_nats_ge_all finite.choose
-    let not_present := max_nat + 1
-    have h₁ : ∀ n : (All Nat), not_present > n := fun n => Nat.lt_succ_of_le (h₀ n)
-    have h₂ : ∀ n : (All Nat), not_present ≠ n := fun n => Nat.ne_iff_lt_or_gt.mpr (Or.inr (h₁ n))
-    have h₃ : not_present ∉ All Nat := fun h => h₂ ⟨not_present, h⟩ rfl
-    exact h₃ trivial
+    let max_rank := max_rank_of_finite rank finite.choose
+    have h₀ : ∀x : (All α), max_rank ≥ rank x := max_rank_of_finite_ge_all rank finite.choose
+    let not_present := of_rank (max_rank + 1)
+    have h_not_present : rank not_present = max_rank + 1 := h (max_rank + 1)
+    have h₂ : ∀ x : (All α), rank not_present > rank x := fun n => by
+      rw [h_not_present]
+      exact Nat.lt_succ_of_le (h₀ n)
+    have h₃ : ∀ x : (All α), rank not_present ≠ rank x := fun n => Nat.ne_iff_lt_or_gt.mpr (Or.inr (h₂ n))
+    have h₄ : ∀ x : (All α), not_present ≠ x := fun x h => h₃ x (congrArg rank h)
+    have h₅ : not_present ∉ All α := fun h => h₄ ⟨not_present, h⟩ rfl
+    exact h₅ trivial
+
+theorem all_nats_infinite : ¬FiniteProp (All Nat) := all_of_inductive_infinite id id (fun _ => rfl)
 end Set
 
 namespace propositional
@@ -259,6 +264,13 @@ def is_subformula (a b : Proposition) : Prop := a = b ∨ match b with
     | Atomic _ => False
     | Not c => a.is_subformula c
     | Implies c d => a.is_subformula c ∨ a.is_subformula d
+
+theorem propositions_infinite : ¬Set.FiniteProp (Set.All Proposition) := by
+  let rank : Proposition → Nat
+  | Atomic n => n
+  | Not _ => 0
+  | Implies _ _ => 0
+  exact Set.all_of_inductive_infinite rank Atomic (fun _ => rfl)
 
 --theorem propositions_countable : Set.countable (Set.all Proposition) :=
 end Proposition
