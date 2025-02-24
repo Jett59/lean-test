@@ -136,48 +136,6 @@ def Union {S T : Set α} : FiniteProp S → FiniteProp T → FiniteProp (S ∪ T
 def Intersection {S T : Set α} : FiniteProp S → FiniteProp T → FiniteProp (S ∩ T) := (⟨Finite.Intersection ·.choose ·.choose, trivial⟩)
 end FiniteProp
 
-def equalCardinality {α : Type u} {β : Type v} (S : Set α) (T : Set β) : Prop :=   ∃ f : S → T, (∀ x₁ x₂, f x₁ = f x₂ → x₁ = x₂) ∧ (∀ y, ∃ x, f x = y)
-
-theorem equal_cardinality_refl {S : Set α} : equalCardinality S S := ⟨id, fun _ _ h => h, fun x => ⟨x, rfl⟩⟩
-theorem equal_cardinality_symm {S : Set α} {T : Set β} (h : equalCardinality S T) : equalCardinality T S := by
-  have ⟨f, h₁, h₂⟩ := h
-  let g : T → S := fun y => (h₂ y).choose
-  have h₃ : ∀ y : T, f (g y) = y := fun y => (h₂ y).choose_spec
-  apply Exists.intro g
-  constructor
-  . intro y₁ y₂ h₄
-    rw [←h₃ y₁, ←h₃ y₂]
-    exact congrArg f h₄
-  . intro x
-    apply Exists.intro (f x)
-    have h₅ : f (g (f x)) = f x := h₃ (f x)
-    exact h₁ (g (f x)) x h₅
-
-theorem equal_cardinality_trans {S : Set α} {T : Set β} {U : Set γ} (h'₁ : equalCardinality S T) (h'₂ : equalCardinality T U) : equalCardinality S U := by
-  have ⟨f, h₁₁, h₁₂⟩ := h'₁
-  have ⟨g, h₂₁, h₂₂⟩ := h'₂
-  let h := g ∘ f
-  apply Exists.intro h
-  constructor
-  . intro x₁ x₂ h₃
-    have h₄ : f x₁ = f x₂ := h₂₁ (f x₁) (f x₂) h₃
-    exact h₁₁ x₁ x₂ h₄
-  . intro z
-    have ⟨y, h₅⟩ : ∃ y : T, g y = z := h₂₂ z
-    have ⟨x, h₆⟩ : ∃ x : S, f x = y := h₁₂ y
-    have h₇ : g (f x) = z := Eq.subst (motive := fun a => g a = z) h₆.symm h₅
-    exact ⟨x, h₇⟩
-
-def Countable (S : Set α) : Prop := ∃ f : S → Nat, ∀ x₁ x₂ : S, f x₁ = f x₂ → x₁ = x₂
-
-theorem any_natural_numbers_countable (S : Set Nat) : Countable S := by
-  let f : S → Nat := fun x => x.val
-  apply Exists.intro f
-  intro x₁ x₂
-  unfold f
-  intro h
-  exact Subtype.eq h
-
 def max_rank_of_finite {S : Set α} (rank : α → Nat) (f : Finite S) : Nat := match f with
   | Finite.Empty => 0
   | Finite.Singleton x => rank x
@@ -212,6 +170,195 @@ theorem all_of_inductive_infinite (rank : α → Nat) (of_rank : Nat → α) (h 
     exact h₅ trivial
 
 theorem all_nats_infinite : ¬FiniteProp (All Nat) := all_of_inductive_infinite id id (fun _ => rfl)
+
+def equalCardinality {α : Type u} {β : Type v} (S : Set α) (T : Set β) : Prop :=   ∃ f : S → T, (∀ x₁ x₂, f x₁ = f x₂ → x₁ = x₂) ∧ (∀ y, ∃ x, f x = y)
+
+theorem equal_cardinality_refl {S : Set α} : equalCardinality S S := ⟨id, fun _ _ h => h, fun x => ⟨x, rfl⟩⟩
+theorem equal_cardinality_symm {S : Set α} {T : Set β} (h : equalCardinality S T) : equalCardinality T S := by
+  have ⟨f, h₁, h₂⟩ := h
+  let g : T → S := fun y => (h₂ y).choose
+  have h₃ : ∀ y : T, f (g y) = y := fun y => (h₂ y).choose_spec
+  apply Exists.intro g
+  constructor
+  . intro y₁ y₂ h₄
+    rw [←h₃ y₁, ←h₃ y₂]
+    exact congrArg f h₄
+  . intro x
+    apply Exists.intro (f x)
+    have h₅ : f (g (f x)) = f x := h₃ (f x)
+    exact h₁ (g (f x)) x h₅
+
+theorem equal_cardinality_trans {S : Set α} {T : Set β} {U : Set γ} (h'₁ : equalCardinality S T) (h'₂ : equalCardinality T U) : equalCardinality S U := by
+  have ⟨f, h₁₁, h₁₂⟩ := h'₁
+  have ⟨g, h₂₁, h₂₂⟩ := h'₂
+  let h := g ∘ f
+  apply Exists.intro h
+  constructor
+  . intro x₁ x₂ h₃
+    have h₄ : f x₁ = f x₂ := h₂₁ (f x₁) (f x₂) h₃
+    exact h₁₁ x₁ x₂ h₄
+  . intro z
+    have ⟨y, h₅⟩ : ∃ y : T, g y = z := h₂₂ z
+    have ⟨x, h₆⟩ : ∃ x : S, f x = y := h₁₂ y
+    have h₇ : g (f x) = z := Eq.subst (motive := fun a => g a = z) h₆.symm h₅
+    exact ⟨x, h₇⟩
+
+def Countable (S : Set α) : Prop := ∃ f : S → Nat, ∀ x₁ x₂ : S, f x₁ = f x₂ → x₁ = x₂
+
+namespace Countable
+theorem any_natural_numbers_countable (S : Set Nat) : Countable S := by
+  let f : S → Nat := fun x => x.val
+  apply Exists.intro f
+  intro x₁ x₂
+  unfold f
+  intro h
+  exact Subtype.eq h
+
+def pair (a b : Nat) : Nat := 2^a*3^b
+
+theorem pair_not_zero (a b : Nat) : pair a b ≠ 0 := by
+  intro h'
+  have h₁ : 2^a = 0 ∨ 3^b = 0 := Nat.mul_eq_zero.mp h'
+  apply Or.elim h₁
+  . intro h₁'
+    have h₂ : 1 < 2 := by decide
+    have h₃ : 1 ≤ 2^a := (Nat.pow_le_pow_iff_right h₂).mpr (Nat.zero_le a)
+    have h₄ : 1 ≤ 0 := Eq.subst h₁' h₃
+    contradiction
+  . intro h₁'
+    have h₂ : 1 < 3 := by decide
+    have h₃ : 1 ≤ 3^b := (Nat.pow_le_pow_iff_right h₂).mpr (Nat.zero_le b)
+    have h₄ : 1 ≤ 0 := Eq.subst h₁' h₃
+    contradiction
+
+def unpair_left (p : Nat) : Nat :=
+  if p = 0 then
+    0
+  else if h₁ : 2 ∣ p then
+    unpair_left (p/2) + 1
+  else
+    0
+def unpair_right (p : Nat) : Nat :=
+  if p = 0 then
+    0
+  else if 3 ∣ p then
+    unpair_right (p/3) + 1
+  else
+    0
+
+theorem euclids_lemma_2_3 (k : Nat) : 2 ∣ 3*k → 2 ∣ k := match k with
+  |0 => by decide
+  | 1 => by decide
+  | j+2 => by
+    intro (h : 2 ∣ 3*(j+2))
+    have h₁ : 3*(j+2) = 3*j+6 := Nat.left_distrib 3 j 2
+    have h₂ : 2 ∣ 3*j+6 := Eq.subst h₁ h
+    have h₃ : 2 ∣ 3*j :=(Nat.dvd_add_iff_left (by decide : 2 ∣ 6)).mpr h₂
+    have ih : 2 ∣ j := euclids_lemma_2_3 j h₃
+    exact (Nat.dvd_add_iff_left (by decide : 2 ∣ 2)).mp ih
+
+theorem euclids_lemma_3_2 (k : Nat) : 3 ∣ 2*k → 3 ∣ k := match k with
+  |0 => by decide
+  | 1 => by decide
+  | 2 => by decide
+  | j+3 => by
+    intro (h : 3 ∣ 2*(j+3))
+    have h₁ : 2*(j+3) = 2*j+6 := Nat.left_distrib 2 j 3
+    have h₂ : 3 ∣ 2*j+6 := Eq.subst h₁ h
+    have h₃ : 3 ∣ 2*j := (Nat.dvd_add_iff_left (by decide : 3 ∣ 6)).mpr h₂
+    have ih : 3 ∣ j := euclids_lemma_3_2 j h₃
+    exact (Nat.dvd_add_iff_left (by decide : 3 ∣ 3)).mp ih
+
+theorem power_of_3_not_even (k : Nat) : ¬ 2 ∣ 3^k := match k with
+  | 0 => by decide
+  | j+1 => by
+    intro (h : 2 ∣ 3^(j+1))
+    have h₁ : 2 ∣ 3*3^j := Eq.subst (Nat.mul_comm (3^j) 3) h
+    have h₂ : 2 ∣ 3^j := euclids_lemma_2_3 (3^j) h₁
+    exact (power_of_3_not_even j) h₂
+
+theorem power_of_2_not_multiple_of_3 (k : Nat) : ¬ 3 ∣ 2^k := match k with
+  | 0 => by decide
+  | j+1 => by
+    intro (h : 3 ∣ 2^(j+1))
+    have h₁ : 3 ∣ 2*2^j := Eq.subst (Nat.mul_comm (2^j) 2) h
+    have h₂ : 3 ∣ 2^j := euclids_lemma_3_2 (2^j) h₁
+    exact (power_of_2_not_multiple_of_3 j) h₂
+
+theorem cancel_unpair_left (a b : Nat) : unpair_left (pair a b) = a := match a with
+  | 0 => by
+    have h₁ : ¬ 2 ∣ 3^b := power_of_3_not_even b
+    unfold unpair_left
+    split
+    . rfl
+    . split
+      . apply False.elim
+        apply h₁
+        have h₄ : 2 ∣ 1*3^b := by assumption
+        exact Eq.subst (Nat.one_mul (3^b)) h₄
+      . rfl
+  | k+1 => by
+    have ih :  unpair_left (pair k b) = k := cancel_unpair_left k b
+    have h₁ : pair (k+1) b = 2*(pair k b) := calc pair (k+1) b
+      _ = 2^k*2*3^b := rfl
+      _ = 2*2^k*3^b := by rw [Nat.mul_comm (2^k) 2]
+      _ = 2*(2^k*3^b) := Nat.mul_assoc 2 (2^k) (3^b)
+    rw [h₁]
+    unfold unpair_left
+    split
+    . have : pair (k+1) b ≠ 0 := pair_not_zero (k+1) b
+      have : 2*pair k b ≠ 0 := Eq.subst (motive := fun x => x ≠ 0) h₁ this
+      contradiction
+    . split
+      . have h₂ : (2*pair k b)/2 = pair k b := by simp
+        have h₃ : (unpair_left (pair k b)) + 1 = k + 1 := congrArg (·+1) ih
+        exact Eq.subst  (motive := fun x => (unpair_left x)+1 = k+1) h₂.symm h₃
+      . have : 2 ∣ 2*pair k b := ⟨pair k b, rfl⟩
+        contradiction
+
+theorem cancel_unpair_right (a b : Nat) : unpair_right (pair a b) = b := match b with
+  | 0 => by
+    have h₁ : ¬ 3 ∣ 2^a := power_of_2_not_multiple_of_3 a
+    unfold unpair_right
+    split
+    . rfl
+    . split
+      . apply False.elim
+        apply h₁
+        have h₄ : 3 ∣ 2^a*1 := by assumption
+        exact Eq.subst (Nat.mul_one (2^a)) h₄
+      . rfl
+  | k+1 => by
+    have ih :  unpair_right (pair a k) = k := cancel_unpair_right a k
+    have h₁ : pair a (k+1) = 3*(pair a k) := calc pair a (k+1)
+      _ = 2^a*(3^k*3) := rfl
+      _ = 2^a*3^k*3 := by rw [Nat.mul_assoc (2^a) (3^k) 3]
+      _ = 3*(2^a*3^k) := Nat.mul_comm (2^a*3^k) 3
+    rw [h₁]
+    unfold unpair_right
+    split
+    . have : pair a (k+1) ≠ 0 := pair_not_zero a (k+1)
+      have : 3*pair a k ≠ 0 := Eq.subst (motive := fun x => x ≠ 0) h₁ this
+      contradiction
+    . split
+      . have h₂ : (3*pair a k)/3 = pair a k := by simp
+        have h₃ : (unpair_right (pair a k)) + 1 = k + 1 := congrArg (·+1) ih
+        exact Eq.subst  (motive := fun x => (unpair_right x)+1 = k+1) h₂.symm h₃
+      . have : 3 ∣ 3*pair a k := ⟨pair a k, rfl⟩
+        contradiction
+
+theorem pairs_countable : Countable (All (Nat × Nat)) := by
+  let f : All (Nat × Nat) → Nat := fun ⟨⟨a,b⟩,_⟩ => pair a b
+  let f_cancel_left : ∀ a b : Nat, unpair_left (f ⟨⟨a,b⟩,trivial⟩) = a := fun a b => cancel_unpair_left a b
+  let f_cancel_right : ∀ a b : Nat, unpair_right (f ⟨⟨a,b⟩,trivial⟩) = b := fun a b => cancel_unpair_right a b
+  apply Exists.intro f
+  intro ⟨⟨x₁,y₁⟩,_⟩ ⟨⟨x₂,y₂⟩,_⟩ h
+  have h₁' : unpair_left (f ⟨⟨x₁,y₁⟩,trivial⟩) = unpair_left (f ⟨⟨x₂,y₂⟩,trivial⟩) := congrArg unpair_left h
+  have h₁ : x₁ = x₂ := Eq.trans (Eq.trans (f_cancel_left x₁ y₁).symm h₁') (f_cancel_left x₂ y₂)
+  have h₂' : unpair_right (f ⟨⟨x₁,y₁⟩,trivial⟩) = unpair_right (f ⟨⟨x₂,y₂⟩,trivial⟩) := congrArg unpair_right h
+  have h₂ : y₁ = y₂ := Eq.trans (Eq.trans (f_cancel_right x₁ y₁).symm h₂') (f_cancel_right x₂ y₂)
+  rw [h₁, h₂]
+end Countable
 end Set
 
 namespace propositional
