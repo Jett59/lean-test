@@ -347,7 +347,7 @@ theorem cancel_unpair_right (a b : Nat) : unpair_right (pair a b) = b := match b
       . have : 3 ∣ 3*pair a k := ⟨pair a k, rfl⟩
         contradiction
 
-theorem pairs_countable : Countable (All (Nat × Nat)) := by
+theorem nat_pairs_countable : Countable (All (Nat × Nat)) := by
   let f : All (Nat × Nat) → Nat := fun ⟨⟨a,b⟩,_⟩ => pair a b
   let f_cancel_left : ∀ a b : Nat, unpair_left (f ⟨⟨a,b⟩,trivial⟩) = a := fun a b => cancel_unpair_left a b
   let f_cancel_right : ∀ a b : Nat, unpair_right (f ⟨⟨a,b⟩,trivial⟩) = b := fun a b => cancel_unpair_right a b
@@ -358,6 +358,29 @@ theorem pairs_countable : Countable (All (Nat × Nat)) := by
   have h₂' : unpair_right (f ⟨⟨x₁,y₁⟩,trivial⟩) = unpair_right (f ⟨⟨x₂,y₂⟩,trivial⟩) := congrArg unpair_right h
   have h₂ : y₁ = y₂ := Eq.trans (Eq.trans (f_cancel_right x₁ y₁).symm h₂') (f_cancel_right x₂ y₂)
   rw [h₁, h₂]
+
+structure CountableSet where
+  type : Type u
+  val : Set type
+  property : Countable val
+
+namespace CountableSet
+def All (type : Type u) (property : Countable (All type)) : CountableSet := mk type (Set.All type) property
+end CountableSet
+
+theorem countable_pairs_countable (S : CountableSet) (T : CountableSet) : Countable (All (S.val × T.val)) := by
+  have ⟨nat_countable_function, h_nat_countable_function⟩ := nat_pairs_countable
+  have ⟨s_countable_function, h_s_countable_function⟩ := S.property
+  have ⟨t_countable_function, h_t_countable_function⟩ := T.property
+  let f : All (S.val × T.val) → Nat := fun ⟨⟨a,b⟩,_⟩ => nat_countable_function ⟨⟨s_countable_function a, t_countable_function b⟩, trivial⟩
+  apply Exists.intro f
+  intro ⟨⟨a₁, b₁⟩, _⟩ ⟨⟨a₂, b₂⟩, _⟩ h₁
+  have h₂' : (⟨⟨s_countable_function a₁, t_countable_function b₁⟩, trivial⟩ : All (Nat × Nat)) = ⟨⟨s_countable_function a₂, t_countable_function b₂⟩,_⟩ := h_nat_countable_function ⟨⟨s_countable_function a₁, t_countable_function b₁⟩,trivial⟩ ⟨⟨s_countable_function a₂, t_countable_function b₂⟩,trivial⟩ h₁
+  have h₂ : (⟨s_countable_function a₁, t_countable_function b₁⟩ : Nat × Nat) = ⟨s_countable_function a₂, t_countable_function b₂⟩ := Subtype.eq_iff.mp h₂'
+  have ⟨h₂₁, h₂₂⟩ : s_countable_function a₁ = s_countable_function a₂ ∧ t_countable_function b₁ = t_countable_function b₂ := Prod.ext_iff.mp h₂
+  have h₃₁ : a₁ = a₂ := h_s_countable_function a₁ a₂ h₂₁
+  have h₃₂ : b₁ = b₂ := h_t_countable_function b₁ b₂ h₂₂
+  exact Subtype.eq (Prod.ext h₃₁ h₃₂)
 end Countable
 end Set
 
@@ -419,7 +442,118 @@ theorem propositions_infinite : ¬Set.FiniteProp (Set.All Proposition) := by
   | Implies _ _ => 0
   exact Set.all_of_inductive_infinite rank Atomic (fun _ => rfl)
 
---theorem propositions_countable : Set.countable (Set.all Proposition) :=
+namespace countable
+inductive PropositionType where
+  | Atomic
+  | Negation
+  | Implication
+
+theorem proposition_type_countable : Set.Countable (Set.All PropositionType) := by
+  let f : Set.All PropositionType → Nat := fun t => match t.val with
+    | PropositionType.Atomic => 0
+    | PropositionType.Negation => 1
+    | PropositionType.Implication => 2
+  apply Exists.intro f
+  intro t₁ t₂ h
+  suffices t₁.val = t₂.val from Subtype.eq this
+  have h₁₁ : t₁ = ⟨t₁.val, trivial⟩ := Subtype.eq rfl
+  have h₁₂ : t₂ = ⟨t₂.val, trivial⟩ := Subtype.eq rfl
+  let t₁_val := t₁.val
+  let t₂_val := t₂.val
+  have h₁ : f ⟨t₁_val, trivial⟩ = f ⟨t₂_val, trivial⟩ := by rw [←h₁₁, ←h₁₂, h]
+  show t₁_val = t₂_val
+  match t₁_val, t₂_val with
+  | PropositionType.Atomic, PropositionType.Atomic => rfl
+  | PropositionType.Negation, PropositionType.Negation => rfl
+  | PropositionType.Implication, PropositionType.Implication => rfl
+
+theorem type_body_pair_countable : Set.Countable (Set.All (Set.All PropositionType × Set.All Nat)) := Set.Countable.countable_pairs_countable (Set.Countable.CountableSet.All PropositionType proposition_type_countable) (Set.Countable.CountableSet.All Nat (Set.Countable.any_natural_numbers_countable (Set.All Nat)))
+
+noncomputable def nat_pair_encoder : Set.All (Nat × Nat) → Nat := Set.Countable.nat_pairs_countable.choose
+theorem nat_pair_encoder_injective (p₁ p₂ : Set.All (Nat × Nat)) : nat_pair_encoder p₁ = nat_pair_encoder p₂ → p₁ = p₂ := Set.Countable.nat_pairs_countable.choose_spec p₁ p₂
+
+noncomputable def convert_to_nat (p : Proposition) : Nat := match p with
+  | Atomic n => type_body_pair_countable.choose ⟨⟨⟨PropositionType.Atomic, trivial⟩, ⟨n, trivial⟩⟩, trivial⟩
+  | Not p => type_body_pair_countable.choose ⟨⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat p, trivial⟩⟩, trivial⟩
+  | Implies p q =>
+    let p_encoded : Nat := convert_to_nat p
+    let q_encoded : Nat := convert_to_nat q
+    let encoded_pair := nat_pair_encoder ⟨⟨p_encoded, q_encoded⟩, trivial⟩
+    type_body_pair_countable.choose ⟨⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair, trivial⟩⟩, trivial⟩
+
+theorem converted_atomic_not_negation (n : Nat) (q : Proposition) : convert_to_nat (Atomic n) ≠ convert_to_nat (Not q) := by
+  intro h₀
+  have h₁ : (⟨⟨⟨PropositionType.Atomic, trivial⟩, ⟨n, trivial⟩⟩, trivial⟩ : Set.All ((Set.All PropositionType) × (Set.All Nat))) = ⟨⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat q, trivial⟩⟩, trivial⟩ := type_body_pair_countable.choose_spec ⟨⟨⟨PropositionType.Atomic, trivial⟩, ⟨n, trivial⟩⟩, trivial⟩ ⟨⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat q, trivial⟩⟩, trivial⟩ h₀
+  have h₂ : (⟨⟨PropositionType.Atomic, trivial⟩, ⟨n, trivial⟩⟩ : (Set.All PropositionType) × (Set.All Nat)) = ⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat q, trivial⟩⟩ := Subtype.eq_iff.mp h₁
+  have h₃ : (⟨PropositionType.Atomic, trivial⟩ : Set.All PropositionType) = ⟨PropositionType.Negation, trivial⟩ := (Prod.ext_iff.mp h₂).left
+  have h₄ : PropositionType.Atomic = PropositionType.Negation := Subtype.eq_iff.mp h₃
+  contradiction
+
+theorem converted_atomic_not_implication (n : Nat) (q r : Proposition) : convert_to_nat (Atomic n) ≠ convert_to_nat (Implies q r) := by
+  intro h₀
+  let q_encoded : Nat := convert_to_nat q
+  let r_encoded : Nat := convert_to_nat r
+  let encoded_pair := nat_pair_encoder ⟨⟨q_encoded, r_encoded⟩, trivial⟩
+  have h₁ : (⟨⟨⟨PropositionType.Atomic, trivial⟩, ⟨n, trivial⟩⟩, trivial⟩ : Set.All ((Set.All PropositionType) × (Set.All Nat))) = ⟨⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair, trivial⟩⟩, trivial⟩ := type_body_pair_countable.choose_spec ⟨⟨⟨PropositionType.Atomic, trivial⟩, ⟨n, trivial⟩⟩, trivial⟩ ⟨⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair, trivial⟩⟩, trivial⟩ h₀
+  have h₂ : (⟨⟨PropositionType.Atomic, trivial⟩, ⟨n, trivial⟩⟩ : (Set.All PropositionType) × (Set.All Nat)) = ⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair, trivial⟩⟩ := Subtype.eq_iff.mp h₁
+  have h₃ : (⟨PropositionType.Atomic, trivial⟩ : Set.All PropositionType) = ⟨PropositionType.Implication, trivial⟩ := (Prod.ext_iff.mp h₂).left
+  have h₄ : PropositionType.Atomic = PropositionType.Implication := Subtype.eq_iff.mp h₃
+  contradiction
+
+theorem converted_negation_not_implication (q₁ : Proposition) (q₂ r : Proposition) : convert_to_nat (Not q₁) ≠ convert_to_nat (Implies q₂ r) := by
+  intro h₀
+  let q₂_encoded : Nat := convert_to_nat q₂
+  let r_encoded : Nat := convert_to_nat r
+  let encoded_pair := nat_pair_encoder ⟨⟨q₂_encoded, r_encoded⟩, trivial⟩
+  have h₁ : (⟨⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat q₁, trivial⟩⟩, trivial⟩ : Set.All ((Set.All PropositionType) × (Set.All Nat))) = ⟨⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair, trivial⟩⟩, trivial⟩ := type_body_pair_countable.choose_spec ⟨⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat q₁, trivial⟩⟩, trivial⟩ ⟨⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair, trivial⟩⟩, trivial⟩ h₀
+  have h₂ : (⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat q₁, trivial⟩⟩ : (Set.All PropositionType) × (Set.All Nat)) = ⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair, trivial⟩⟩ := Subtype.eq_iff.mp h₁
+  have h₃ : (⟨PropositionType.Negation, trivial⟩ : Set.All PropositionType) = ⟨PropositionType.Implication, trivial⟩ := (Prod.ext_iff.mp h₂).left
+  have h₄ : PropositionType.Negation = PropositionType.Implication := Subtype.eq_iff.mp h₃
+  contradiction
+
+theorem convert_to_nat_injective (p₁ p₂ : Proposition) : convert_to_nat p₁ = convert_to_nat p₂ → p₁ = p₂ := by
+  intro h₀
+  match p₁, p₂ with
+  | Atomic n₁, Atomic n₂ =>
+    have h₁ : (⟨⟨⟨PropositionType.Atomic, trivial⟩, ⟨n₁, trivial⟩⟩, trivial⟩ : Set.All ((Set.All PropositionType) × (Set.All Nat))) = ⟨⟨⟨PropositionType.Atomic, trivial⟩, ⟨n₂, trivial⟩⟩, trivial⟩ := type_body_pair_countable.choose_spec ⟨⟨⟨PropositionType.Atomic, trivial⟩, ⟨n₁, trivial⟩⟩, trivial⟩ ⟨⟨⟨PropositionType.Atomic, trivial⟩, ⟨n₂, trivial⟩⟩, trivial⟩ h₀
+    have h₂ : (⟨⟨PropositionType.Atomic, trivial⟩, ⟨n₁, trivial⟩⟩ : (Set.All PropositionType) × (Set.All Nat)) = ⟨⟨PropositionType.Atomic, trivial⟩, ⟨n₂, trivial⟩⟩ := Subtype.eq_iff.mp h₁
+    have h₃ : (⟨n₁, trivial⟩ : Set.All Nat) = ⟨n₂, trivial⟩ := (Prod.ext_iff.mp h₂).right
+    have h₄ : n₁ = n₂ := Subtype.eq_iff.mp h₃
+    congr
+  | Not q₁, Not q₂ =>
+    have h₁ : (⟨⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat q₁, trivial⟩⟩, trivial⟩ : Set.All ((Set.All PropositionType) × (Set.All Nat))) = ⟨⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat q₂, trivial⟩⟩, trivial⟩ := type_body_pair_countable.choose_spec ⟨⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat q₁, trivial⟩⟩, trivial⟩ ⟨⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat q₂, trivial⟩⟩, trivial⟩ h₀
+    have h₂ : (⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat q₁, trivial⟩⟩ : (Set.All PropositionType) × (Set.All Nat)) = ⟨⟨PropositionType.Negation, trivial⟩, ⟨convert_to_nat q₂, trivial⟩⟩ := Subtype.eq_iff.mp h₁
+    have h₃ : (⟨convert_to_nat q₁, trivial⟩ : Set.All Nat) = ⟨convert_to_nat q₂, trivial⟩ := (Prod.ext_iff.mp h₂).right
+    have h₄ : convert_to_nat q₁ = convert_to_nat q₂ := Subtype.eq_iff.mp h₃
+    have h₅ : q₁ = q₂ := convert_to_nat_injective q₁ q₂ h₄
+    congr
+  | Implies q₁ r₁, Implies q₂ r₂ =>
+    let q₁_encoded := convert_to_nat q₁
+    let q₂_encoded := convert_to_nat q₂
+    let r₁_encoded := convert_to_nat r₁
+    let r₂_encoded := convert_to_nat r₂
+    let encoded_pair₁ := nat_pair_encoder ⟨⟨q₁_encoded, r₁_encoded⟩, trivial⟩
+    let encoded_pair₂ := nat_pair_encoder ⟨⟨q₂_encoded, r₂_encoded⟩, trivial⟩
+    have h₁ : (⟨⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair₁, trivial⟩⟩, trivial⟩ : Set.All ((Set.All PropositionType) × (Set.All Nat))) = ⟨⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair₂, trivial⟩⟩, trivial⟩ := type_body_pair_countable.choose_spec ⟨⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair₁, trivial⟩⟩, trivial⟩ ⟨⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair₂, trivial⟩⟩, trivial⟩ h₀
+    have h₂ : (⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair₁, trivial⟩⟩ : (Set.All PropositionType) × (Set.All Nat)) = ⟨⟨PropositionType.Implication, trivial⟩, ⟨encoded_pair₂, trivial⟩⟩ := Subtype.eq_iff.mp h₁
+    have h₃ : (⟨encoded_pair₁, trivial⟩ : Set.All Nat) = ⟨encoded_pair₂, trivial⟩ := (Prod.ext_iff.mp h₂).right
+    have h₄ : encoded_pair₁ = encoded_pair₂ := Subtype.eq_iff.mp h₃
+    have h₅ : (⟨⟨convert_to_nat q₁, convert_to_nat r₁⟩, trivial⟩ : Set.All (Nat × Nat)) = ⟨⟨convert_to_nat q₂, convert_to_nat r₂⟩, trivial⟩ := nat_pair_encoder_injective ⟨⟨convert_to_nat q₁, convert_to_nat r₁⟩, trivial⟩ ⟨⟨convert_to_nat q₂, convert_to_nat r₂⟩, trivial⟩ h₄
+    have h₆ : (⟨convert_to_nat q₁, convert_to_nat r₁⟩ : Nat × Nat) = ⟨convert_to_nat q₂, convert_to_nat r₂⟩ := Subtype.eq_iff.mp h₅
+    have h₇ : q₁ = q₂ := convert_to_nat_injective q₁ q₂ (Prod.ext_iff.mp h₆).left
+    have h₈ : r₁ = r₂ := convert_to_nat_injective r₁ r₂ (Prod.ext_iff.mp h₆).right
+    congr
+  | Atomic n, Not q => exact False.elim (converted_atomic_not_negation n q h₀)
+  | Not q, Atomic n=> exact False.elim (converted_atomic_not_negation n q h₀.symm)
+  | Atomic n, Implies q r => exact False.elim (converted_atomic_not_implication n q r h₀)
+  | Implies q r, Atomic n => exact False.elim (converted_atomic_not_implication n q r h₀.symm)
+  | Not q₁, Implies q₂ r => exact False.elim (converted_negation_not_implication q₁ q₂ r h₀)
+  | Implies q₂ r, Not q₁ => exact False.elim (converted_negation_not_implication q₁ q₂ r h₀.symm)
+end countable
+
+theorem propositions_countable : Set.Countable (Set.All Proposition) := by
+  apply Exists.intro fun ⟨p, _⟩ => countable.convert_to_nat p
+  exact fun ⟨p₁, _⟩ ⟨p₂, _⟩ h => Subtype.eq (countable.convert_to_nat_injective p₁ p₂ h)
 end Proposition
 
 inductive TruthValue where
