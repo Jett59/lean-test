@@ -155,21 +155,35 @@ theorem max_rank_of_finite_ge_all {S : Set α} (rank : α → Nat) (f : Finite S
   have h₂ : max_rank_of_finite rank (Finite.Intersection A B) ≥ max_rank_of_finite rank A := Nat.le_max_left (max_rank_of_finite rank A) (max_rank_of_finite rank B)
   Nat.le_trans h₁ h₂
 
-theorem all_of_inductive_infinite (rank : α → Nat) (of_rank : Nat → α) (h : ∀ n : Nat, rank (of_rank n) = n) : ¬FiniteProp (All α) := by
+theorem all_of_unbounded_infinite {S : Set α} (rank : α → Nat) (of_at_least_rank : Nat → S) (h : ∀ n : Nat, rank (of_at_least_rank n) ≥ n) : ¬FiniteProp S := by
     intro finite
     let max_rank := max_rank_of_finite rank finite.choose
-    have h₀ : ∀x : (All α), max_rank ≥ rank x := max_rank_of_finite_ge_all rank finite.choose
-    let not_present := of_rank (max_rank + 1)
-    have h_not_present : rank not_present = max_rank + 1 := h (max_rank + 1)
-    have h₂ : ∀ x : (All α), rank not_present > rank x := fun n => by
-      rw [h_not_present]
+    have h₀ : ∀x : S, max_rank ≥ rank x := max_rank_of_finite_ge_all rank finite.choose
+    let not_present := of_at_least_rank (max_rank + 1)
+    have h_not_present : rank not_present ≥ max_rank + 1 := h (max_rank + 1)
+    have h₂ : ∀ x : S, rank not_present > rank x := fun n => by
+      apply Nat.le_trans
       exact Nat.lt_succ_of_le (h₀ n)
-    have h₃ : ∀ x : (All α), rank not_present ≠ rank x := fun n => Nat.ne_iff_lt_or_gt.mpr (Or.inr (h₂ n))
-    have h₄ : ∀ x : (All α), not_present ≠ x := fun x h => h₃ x (congrArg rank h)
-    have h₅ : not_present ∉ All α := fun h => h₄ ⟨not_present, h⟩ rfl
-    exact h₅ trivial
+      exact h_not_present
+    have h₃ : ∀ x : S, rank not_present ≠ rank x := fun n => Nat.ne_iff_lt_or_gt.mpr (Or.inr (h₂ n))
+    have h₄ : ∀ x : S, not_present ≠ x := fun x h => h₃ x (congrArg rank (Subtype.eq_iff.mp h))
+    have h₅ : not_present.val ∉ S := fun h => h₄ ⟨not_present, h⟩ rfl
+    exact h₅ not_present.property
+
+theorem all_of_inductive_infinite (rank : α → Nat) (of_rank : Nat → α) (h : ∀ n : Nat, rank (of_rank n) = n) : ¬FiniteProp (All α) :=
+all_of_unbounded_infinite rank (fun rank => ⟨of_rank rank, trivial⟩) (fun x => Nat.le_of_eq (h x).symm)
 
 theorem all_nats_infinite : ¬FiniteProp (All Nat) := all_of_inductive_infinite id id (fun _ => rfl)
+
+theorem infinite_sets_contain_element (S : Set α) (h : ¬ FiniteProp S) : ∃ _x : S, True := by
+  apply byContradiction
+  intro h₁'
+  have h₁ : ∀ x : α, x ∉ S := fun x h => h₁' ⟨⟨x, h⟩, trivial⟩
+  have h₂ : ∀ x : α, x ∈ S ↔ False := fun x => ⟨h₁ x, False.elim⟩
+  have h₃ : S = ∅ := setext S ∅ h₂
+  apply h
+  rw [h₃]
+  exact FiniteProp.Empty
 
 def equalCardinality {α : Type u} {β : Type v} (S : Set α) (T : Set β) : Prop :=   ∃ f : S → T, (∀ x₁ x₂, f x₁ = f x₂ → x₁ = x₂) ∧ (∀ y, ∃ x, f x = y)
 
@@ -381,6 +395,196 @@ theorem countable_pairs_countable (S : CountableSet) (T : CountableSet) : Counta
   have h₃₁ : a₁ = a₂ := h_s_countable_function a₁ a₂ h₂₁
   have h₃₂ : b₁ = b₂ := h_t_countable_function b₁ b₂ h₂₂
   exact Subtype.eq (Prod.ext h₃₁ h₃₂)
+
+theorem nats_bounded_below (S : Set Nat) (sample_value : Nat) (h : S.predicate sample_value) : ¬ ∀ n : S, ∃ m : S, n.val > m.val := by
+  intro h'
+  have ⟨m, _⟩ : ∃ m : S, m < sample_value := h' ⟨sample_value, h⟩
+  exact nats_bounded_below S m.val m.property h'
+
+theorem nats_bounded_above_finite (S : Set Nat) (n : Nat) (h : ∀ m : S, m < n) : FiniteProp S := match n with
+  | 0 => by
+    have h₁ : ∀ m : Nat, m ∉ S := fun m h' => Nat.not_lt_zero m (h ⟨m, h'⟩)
+    have h₂ : ∀ m : Nat, m ∈ S ↔ False := fun m => ⟨h₁ m, False.elim⟩
+    have h₃ : S = ∅ := setext S ∅ h₂
+    rw [h₃]
+    exact FiniteProp.Empty
+  | k+1 => by
+    cases (em (k ∈ S)) with
+    | inr h_false =>
+      have h₄ : ∀ m : S, m.val ≠ k := fun m h => h_false (Eq.subst h m.property)
+      have h₅ : ∀ m : S, m ≤ k := fun m => Nat.le_of_lt_add_one (h m)
+      have h₆ : ∀ m : S, m < k := fun m => (Nat.le_iff_lt_or_eq.mp (h₅ m)).resolve_right (h₄ m)
+      exact nats_bounded_above_finite S k h₆
+    | inl h_true =>
+      let S_without_k : Set Nat := Set.mk (fun m => S.predicate m ∧ m ≠ k)
+      have h₇ : ∀ m : S_without_k, m.val ≠ k := fun m => m.property.right
+      have h₈ : ∀ m : S_without_k, m < k+1 := fun m => h ⟨m.val, m.property.left⟩
+      have h₉ : ∀ m : S_without_k, m ≤ k := fun m => Nat.le_of_lt_add_one (h₈ m)
+      have h₁₀ : ∀ m : S_without_k, m < k := fun m => (Nat.le_iff_lt_or_eq.mp (h₉ m)).resolve_right (h₇ m)
+      have h₁₁ : FiniteProp S_without_k := nats_bounded_above_finite S_without_k k h₁₀
+      suffices S = S_without_k ∪ {k} from Eq.subst this.symm (FiniteProp.Union h₁₁ (FiniteProp.Singleton k))
+      apply setext S (S_without_k ∪ {k})
+      intro r
+      apply Iff.intro
+      . intro h₁₂
+        cases (em (r = k)) with
+        | inl h => exact Or.inr h
+        | inr h => exact Or.inl ⟨h₁₂, h⟩
+      . intro h₁₃
+        cases h₁₃ with
+        | inl h => exact h.left
+        | inr h => rw [h]; assumption
+
+theorem infinite_nats_unbounded_above (S : Set Nat) (h : ¬ FiniteProp S) : ∀ n : Nat, ∃ m : S, m > n := by
+  intro n
+  apply byContradiction
+  intro h₁'
+  have h₁ : ∀ m : S, ¬ m > n := fun m h => h₁' ⟨m, h⟩
+  have h₂ : ∀ m : S, m ≤ n := fun m => Nat.not_lt.mp (h₁ m)
+  have h₃ : ∀ m : S, m < n+1 := fun m => Nat.lt_add_one_iff_lt_or_eq.mpr (Nat.le_iff_lt_or_eq.mp (h₂ m))
+  apply h
+  exact nats_bounded_above_finite S (n+1) h₃
+
+theorem infinite_bounded_below_still_infinite (S : Set Nat) (h : ¬ FiniteProp S) (minimum : Nat) : ¬ FiniteProp (Set.mk (fun n => n ∈ S ∧ n  ≥ minimum)) :=
+  let T := Set.mk (fun n => n ∈ S ∧ n ≥ minimum)
+  let of_at_least_rank : Nat → T := fun rank =>
+    let val : S := (infinite_nats_unbounded_above S h (minimum + rank)).choose
+    have property : val.val ∈ S ∧ val.val ≥ minimum := ⟨val.property, Nat.le_trans (Nat.le_add_right minimum rank) (Nat.le_of_lt (infinite_nats_unbounded_above S h (minimum + rank)).choose_spec)⟩
+    ⟨val.val, property⟩
+  all_of_unbounded_infinite
+  id
+  of_at_least_rank
+  (fun rank => Nat.le_trans (Nat.le_add_left rank minimum) (Nat.le_of_lt (infinite_nats_unbounded_above S h (minimum + rank)).choose_spec))
+
+theorem has_minimum (S : Set Nat) (h : ∃ _n : S, True) : ∃ n : S, ∀ m : S, n.val ≤ m.val := by
+  apply byContradiction
+  intro h'
+  have h₁ : ∀ n : S, ¬ ∀ m : S, n.val ≤ m.val := fun n h => h' ⟨n, h⟩
+  have h₂ : ∀ n : S, ∃ m : S, n.val > m.val := by
+    intro n
+    apply byContradiction
+    intro h₂'
+    apply h₁ n
+    intro m
+    rw [←Nat.not_lt]
+    intro h₂''
+    exact h₂' ⟨m, h₂''⟩
+  exact nats_bounded_below S h.choose.val h.choose.property h₂
+
+noncomputable def nth_of_infinite {S : Set Nat} (h : ¬ FiniteProp S) (n : Nat) : S := match n with
+  | 0 => (has_minimum S (infinite_sets_contain_element S h)).choose
+  | k+1 =>
+    let minimum := (nth_of_infinite h k).val + 1
+    let T := Set.mk fun r => r ∈ S ∧ r ≥ minimum
+    let val : T := (has_minimum T (infinite_sets_contain_element T (infinite_bounded_below_still_infinite S h minimum))).choose
+    ⟨val.val, val.property.left⟩
+
+theorem nth_lt_n_plus_oneth {S : Set Nat} (h : ¬ FiniteProp S) (n : Nat) : (nth_of_infinite h n).val < (nth_of_infinite h (n+1)).val := by
+  let minimum := (nth_of_infinite h n).val + 1
+  let T : Set Nat := { predicate := fun r => r ∈ S ∧ r ≥ minimum }
+  let rhs_val := (has_minimum T (infinite_sets_contain_element T (infinite_bounded_below_still_infinite S h minimum))).choose
+  let val_for_rhs := rhs_val.val
+  have h_val_for_rhs : val_for_rhs ∈ S ∧ val_for_rhs ≥ minimum := rhs_val.property
+  show nth_of_infinite h n < val_for_rhs
+  have h₁ : val_for_rhs > (nth_of_infinite h n) := Nat.lt_of_add_one_le h_val_for_rhs.right
+  exact h₁
+
+theorem nth_lt_add {S : Set Nat} (h_f : ¬ FiniteProp S) (n m : Nat) (h : m > 0) : (nth_of_infinite h_f n).val < (nth_of_infinite h_f (n+m)).val := match m with
+  | 0 => by contradiction
+  | 1 => nth_lt_n_plus_oneth h_f n
+  | k+2 => calc (nth_of_infinite h_f n).val
+    _ < (nth_of_infinite h_f (n+(k+1))).val := nth_lt_add h_f n (k+1) (Nat.zero_lt_of_ne_zero (Nat.succ_ne_zero k))
+    _ < (nth_of_infinite h_f (n+(k+1)+1)).val := nth_lt_n_plus_oneth h_f (n+(k+1))
+
+theorem nth_increasing {S : Set Nat} (h_f : ¬ FiniteProp S) (m n : Nat) (h : m < n) : (nth_of_infinite h_f m).val < (nth_of_infinite h_f n).val := by
+  let ⟨k, h_k⟩ := Nat.exists_eq_add_of_lt h
+  rw [h_k]
+  exact nth_lt_add h_f m (k+1) (Nat.zero_lt_of_ne_zero (Nat.succ_ne_zero k))
+
+theorem nth_of_infinite_injective {S : Set Nat} (h_f : ¬ FiniteProp S) (n₁ n₂ : Nat) : nth_of_infinite h_f n₁ = nth_of_infinite h_f n₂ → n₁ = n₂ := by
+  intro h₁
+  apply byContradiction
+  intro h₂
+  cases Nat.lt_or_gt.mp h₂ with
+  | inl h =>
+    have h₃ : (nth_of_infinite h_f n₁).val < (nth_of_infinite h_f n₂) := nth_increasing h_f n₁ n₂ h
+    exact Nat.ne_of_lt h₃ (Subtype.eq_iff.mp h₁)
+  | inr h =>
+    have h₃ : (nth_of_infinite h_f n₂).val < (nth_of_infinite h_f n₁) := nth_increasing h_f n₂ n₁ h
+    exact Nat.ne_of_lt h₃ (Subtype.eq_iff.mp h₁.symm)
+
+theorem no_nats_between_nths {S : Set Nat} (h_f : ¬ FiniteProp S) (n : Nat) : ∀ m : S, m.val ≤ nth_of_infinite h_f n ∨ m.val ≥ nth_of_infinite h_f (n+1) := by
+  intro m
+  cases em (m.val ≤ nth_of_infinite h_f n) with
+  | inl h => exact Or.inl h
+  | inr h =>
+    have h : m.val > nth_of_infinite h_f n := Nat.gt_of_not_le h
+    apply Or.inr
+    let minimum := (nth_of_infinite h_f n).val + 1
+    let T : Set Nat := { predicate := fun r => r ∈ S ∧ r ≥ minimum }
+    let rhs_val := (has_minimum T (infinite_sets_contain_element T (infinite_bounded_below_still_infinite S h_f minimum))).choose
+    show m ≥ rhs_val.val
+    have h₁ : ∀ k : T, k ≥ rhs_val.val := (has_minimum T (infinite_sets_contain_element T (infinite_bounded_below_still_infinite S h_f minimum))).choose_spec
+    have h₂ : m.val ≥ minimum := Nat.succ_le.mpr h
+    exact h₁ ⟨m.val, ⟨m.property, h₂⟩⟩
+
+theorem zeroth_le_all {S : Set Nat} (h_f : ¬ FiniteProp S) : ∀ n : S, n.val ≥ nth_of_infinite h_f 0 := by
+  intro n
+  have h₁ : ∀ m : S, (nth_of_infinite h_f 0).val ≤ m.val := (has_minimum S (infinite_sets_contain_element S h_f)).choose_spec
+  exact h₁ n
+
+theorem n_le_nth {S : Set Nat} (h_f : ¬ FiniteProp S) : ∀ n : Nat, n ≤ nth_of_infinite h_f n := by
+  intro n
+  match n with
+  | 0 => exact Nat.zero_le (nth_of_infinite h_f 0)
+  | k+1 =>
+    have ih : k ≤ nth_of_infinite h_f k := n_le_nth h_f k
+    have h₁ : k < nth_of_infinite h_f (k+1) := Nat.lt_of_le_of_lt ih (nth_lt_n_plus_oneth h_f k)
+    exact Nat.succ_le_of_lt h₁
+
+theorem nth_image_infinite {S : Set Nat} (h_f : ¬ FiniteProp S) : ¬ FiniteProp (Set.mk fun (y : Nat) => y ∈ S ∧ ∃ n : Nat, nth_of_infinite h_f n = y) :=
+  all_of_unbounded_infinite
+  (fun x => x)
+  (fun n => ⟨nth_of_infinite h_f n, ⟨(nth_of_infinite h_f n).property, ⟨n, rfl⟩⟩⟩ : Nat → (Set.mk fun y => y ∈ S ∧ ∃ n : Nat, nth_of_infinite h_f n = y))
+  (n_le_nth h_f)
+
+theorem nth_of_infinite_surjective {S : Set Nat} (h_f : ¬ FiniteProp S) : ∀ y : S, ∃ n : Nat, nth_of_infinite h_f n = y := by
+  intro y
+  let image_of_nth : Set Nat := Set.mk fun y => y ∈ S ∧ ∃ n : Nat, nth_of_infinite h_f n = y
+  let T : Set Nat := Set.mk fun n => n ∈ image_of_nth ∧ n ≥ y
+  have h₁ : ∃ _ : T, True := infinite_sets_contain_element T (infinite_bounded_below_still_infinite image_of_nth (nth_image_infinite h_f) y)
+  let ⟨next_lowest_nth, h₂⟩ : ∃ x : T, ∀ y : T, x.val ≤ y.val := has_minimum T h₁
+  let n : Nat := next_lowest_nth.property.left.right.choose
+  have h₃ : nth_of_infinite h_f n = next_lowest_nth.val := next_lowest_nth.property.left.right.choose_spec
+  have h₄ : y.val ≤ next_lowest_nth.val := next_lowest_nth.property.right
+  cases Nat.le_iff_lt_or_eq.mp h₄ with
+  | inr h => exact ⟨n, Subtype.eq (Eq.trans h₃ h.symm)⟩
+  | inl h =>
+    apply False.elim
+    match n with
+    | 0 => exact Nat.not_lt_of_le (zeroth_le_all h_f y) (Eq.subst h₃.symm h)
+    | k+1 =>
+      have h₅ : nth_of_infinite h_f k < y.val := by
+        apply byContradiction
+        intro h₅'
+        have h₆ : nth_of_infinite h_f k ≥ y.val := Nat.le_of_not_gt h₅'
+        have h₇ : (nth_of_infinite h_f k).val ∈ T := ⟨⟨(nth_of_infinite h_f k).property, ⟨k, rfl⟩⟩, h₆⟩
+        have h₈ : (nth_of_infinite h_f k).val ≥ nth_of_infinite h_f (k+1) := (by rw [h₃]; exact h₂ ⟨nth_of_infinite h_f k, h₇⟩)
+        exact Nat.not_lt_of_ge h₈ (nth_lt_n_plus_oneth h_f k)
+      have h₉ : y.val ≤ nth_of_infinite h_f k ∨ nth_of_infinite h_f (k+1) ≤ y.val := no_nats_between_nths h_f k y
+      have h₁₀ : nth_of_infinite h_f (k+1) ≤ y.val := Or.resolve_left h₉ (Nat.not_le_of_gt h₅)
+      apply Nat.not_lt_of_ge h₁₀
+      rw [h₃]
+      exact h
+
+theorem infinite_nats_equal_cardonality_all_nats {S : Set Nat} (h_f : ¬ FiniteProp S) : equalCardinality (All Nat) S := ⟨fun x => nth_of_infinite h_f x.val, fun x₁ x₂ h => Subtype.eq (nth_of_infinite_injective h_f x₁.val x₂.val h), fun y => ⟨⟨(nth_of_infinite_surjective h_f y).choose, trivial⟩, (nth_of_infinite_surjective h_f y).choose_spec⟩⟩
+
+theorem image_of_infinite_countable_infinite {S : CountableSet} (h_f : ¬ FiniteProp S.val) : ¬ FiniteProp (Set.mk fun n => ∃ x : S.val, n = S.property.choose x) := by
+  intro finite
+  let T := Set.mk fun n => ∃ x : S.val, n = S.property.choose x
+  let maximum := max_rank_of_finite id finite.choose
+  have h₀ : ∀x : T, maximum ≥ x := max_rank_of_finite_ge_all id finite.choose
+  sorry
 end Countable
 end Set
 
