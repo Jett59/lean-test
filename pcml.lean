@@ -121,39 +121,127 @@ theorem union_subset (S T U : Set α) (h₁ : S ⊆ U) (h₂ : T ⊆ U) : (S ∪
 theorem intersection_subset_left (S T : Set α) : (S ∩ T) ⊆ S := fun x => x.property.left
 theorem intersection_subset_right (S T : Set α) : (S ∩ T) ⊆ T := fun x => x.property.right
 
+theorem union_empty (S : Set α) : S = (S ∪ ∅) := by
+  apply setext
+  intro x
+  apply Iff.intro
+  . intro h; exact Or.inl h
+  . intro h
+    apply Or.elim h
+    . intro h; exact h
+    . exact False.elim
+
+theorem intersection_empty (S : Set α) : ∅ = (S ∩ ∅) := by
+  apply setext
+  intro x
+  apply Iff.intro
+  . exact False.elim
+  . exact And.right
+
+theorem insert_into_union_right (x : α) (S T : Set α) : (insert x (S ∪ T)) = (S ∪ (insert x T)) := by
+  apply setext
+  intro y
+  apply Iff.intro
+  . intro h₀
+    match h₀ with
+    | Or.inl h₁ => exact Or.inr (Or.inl h₁)
+    | Or.inr h₁ => match h₁ with
+      | Or.inl h₂ => exact Or.inl h₂
+      | Or.inr h₂ => exact Or.inr (Or.inr h₂)
+  . intro h₀
+    match h₀ with
+    | Or.inl h₁ => exact Or.inr (Or.inl h₁)
+    | Or.inr h₁ => match h₁ with
+      | Or.inl h₂ => exact Or.inl h₂
+      | Or.inr h₂ => exact Or.inr (Or.inr h₂)
+
 inductive Finite.{u} : Set α → Type u where
     | Empty : Finite ∅
-    | Singleton (x : α) : Finite {x}
-    | Union {S T : Set α} : Finite S → Finite T → Finite (S ∪ T)
-    | Intersection {S T : Set α} : Finite S → Finite T → Finite (S ∩ T)
+    | Insert : {S : Set α} → (x : α) → Finite S → Finite (insert x S)
+
+namespace Finite
+def Singleton (x : α) : Finite {x} := by
+  rw [←empty_insert x]
+  exact Finite.Empty.Insert x
+
+def Union {S T : Set α} (f₁ : Finite S) (f₂ : Finite T) : Finite (S ∪ T) := match f₂ with
+  | Empty => by
+    rw [←union_empty S]
+    exact f₁
+  | Insert x f₃ => by
+    rw [←insert_into_union_right]
+    apply Finite.Insert
+    exact Union f₁ f₃
+
+noncomputable def Intersection {T : Set α} (S : Set α) (f : Finite T) : Finite (S ∩ T) := match f with
+  | Empty => by
+    rw [←intersection_empty]
+    exact Finite.Empty
+  | @Insert _ T' x f₁ => by
+    apply @Decidable.byCases (x ∈ S)
+    . intro h₀
+      have h₁ : S ∩ (insert x T') = insert x (S ∩ T') := by
+        apply setext
+        intro y
+        apply Iff.intro
+        . intro h
+          match h.right with
+          | Or.inl h => exact Or.inl h
+          | Or.inr h' => exact Or.inr ⟨h.left, h'⟩
+        . intro h
+          apply And.intro
+          . match h with
+            | Or.inl h_eq => rw [h_eq]; exact h₀
+            | Or.inr h' => exact h'.left
+          . match h with
+            | Or.inl h => exact Or.inl h
+            | Or.inr h => exact Or.inr h.right
+      rw [h₁]
+      apply Finite.Insert
+      exact Intersection S f₁
+    . intro h₀
+      have h₁ : S ∩ (insert x T') = S ∩ T' := by
+        apply setext
+        intro y
+        apply Iff.intro
+        . intro h
+          apply And.intro
+          . exact h.left
+          . apply Or.resolve_left h.right
+            intro h'
+            rw [←h'] at h₀
+            exact h₀ h.left
+        . intro h
+          apply And.intro
+          . exact h.left
+          . exact Or.inr h.right
+      rw [h₁]
+      exact Intersection S f₁
+end Finite
 
 def FiniteProp (S : Set α) := ∃ _ : Finite S, True
 
 namespace FiniteProp
 def Empty : FiniteProp (∅ : Set α) := ⟨Finite.Empty, trivial⟩
+def Insert {S : Set α} : (x : α) → FiniteProp S → FiniteProp (insert x S) := (⟨Finite.Insert · ·.choose, trivial⟩)
 def Singleton (x : α) : FiniteProp {x} := ⟨Finite.Singleton x, trivial⟩
 def Union {S T : Set α} : FiniteProp S → FiniteProp T → FiniteProp (S ∪ T) := (⟨Finite.Union ·.choose ·.choose, trivial⟩)
-def Intersection {S T : Set α} : FiniteProp S → FiniteProp T → FiniteProp (S ∩ T) := (⟨Finite.Intersection ·.choose ·.choose, trivial⟩)
+def Intersection {T : Set α} : (S : Set α) → FiniteProp T → FiniteProp (S ∩ T) := (⟨Finite.Intersection · ·.choose, trivial⟩)
 end FiniteProp
 
 def max_rank_of_finite {S : Set α} (rank : α → Nat) (f : Finite S) : Nat := match f with
   | Finite.Empty => 0
-  | Finite.Singleton x => rank x
-  | Finite.Union A B => max (max_rank_of_finite rank A) (max_rank_of_finite rank B)
-  | Finite.Intersection A B => max (max_rank_of_finite rank A) (max_rank_of_finite rank B)
+  | Finite.Insert x f' => max (rank x) (max_rank_of_finite rank f')
 
 theorem max_rank_of_finite_ge_all {S : Set α} (rank : α → Nat) (f : Finite S) : ∀ x : S, max_rank_of_finite rank f ≥ rank x := match f with
   | Finite.Empty => fun x => False.elim x.property
-  | Finite.Singleton x => fun y => Eq.subst (congrArg rank y.property.symm) (Nat.le_refl (rank x))
-  | Finite.Union A B => fun x =>
-  have h₁ : max_rank_of_finite rank A ≥ rank x ∨ max_rank_of_finite rank B ≥ rank x := Or.elim x.property (fun h => Or.inl (max_rank_of_finite_ge_all rank A ⟨x, h⟩)) (fun h => Or.inr (max_rank_of_finite_ge_all rank B ⟨x, h⟩))
-  have h₂ : max_rank_of_finite rank (Finite.Union A B) ≥ max_rank_of_finite rank A := Nat.le_max_left (max_rank_of_finite rank A) (max_rank_of_finite rank B)
-  have h₃ : max_rank_of_finite rank (Finite.Union A B) ≥ max_rank_of_finite rank B := Nat.le_max_right (max_rank_of_finite rank A) (max_rank_of_finite rank B)
-  Or.elim h₁ (fun h => Nat.le_trans h h₂) (fun h => Nat.le_trans h h₃)
-  | Finite.Intersection A B => fun x =>
-  have h₁ : max_rank_of_finite rank A ≥ rank x := max_rank_of_finite_ge_all rank A ⟨x, x.property.left⟩
-  have h₂ : max_rank_of_finite rank (Finite.Intersection A B) ≥ max_rank_of_finite rank A := Nat.le_max_left (max_rank_of_finite rank A) (max_rank_of_finite rank B)
-  Nat.le_trans h₁ h₂
+  | Finite.Insert x f' => fun y =>
+    match y.property with
+    | Or.inl h => Eq.subst (congrArg rank h).symm (Nat.le_max_left (rank x) (max_rank_of_finite rank f'))
+    | Or.inr h =>
+    have h₁ : max_rank_of_finite rank (Finite.Insert x f') ≥ max_rank_of_finite rank f' := Nat.le_max_right (rank x) (max_rank_of_finite rank f')
+    have h₂ : max_rank_of_finite rank f' ≥ rank y := max_rank_of_finite_ge_all rank f' ⟨y.val, h⟩
+    Nat.le_trans h₂ h₁
 
 theorem all_of_unbounded_infinite {S : Set α} (rank : α → Nat) (of_at_least_rank : Nat → S) (h : ∀ n : Nat, rank (of_at_least_rank n) ≥ n) : ¬FiniteProp S := by
     intro finite
