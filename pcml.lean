@@ -23,11 +23,17 @@ instance {α : Type u} : Membership α (Set α) where
 instance {α : Type u} : HasSubset (Set α) where
   Subset a b := ∀ x : a, x.val ∈ b
 
+instance {α : Type u} : HasSSubset (Set α) where
+  SSubset a b := a ≠ b ∧ ∀ x : a, x.val ∈ b
+
 instance {α : Type u} : Union (Set α) where
   union S T := Set.mk (fun x => S.predicate x ∨ T.predicate x)
 
 instance {α : Type u} : Inter (Set α) where
   inter S T := Set.mk (fun x => S.predicate x ∧ T.predicate x)
+
+instance {α : Type u} : Sub (Set α) where
+  sub S T := Set.mk fun x => x ∈ S ∧ x ∉ T
 
 namespace Set
 variable {α : Type u}
@@ -107,8 +113,29 @@ theorem insert_member {A : Set α} {x : A} : insert x.val A = A := by
       . intro; assumption
     . exact Or.inr
 
+theorem subset_self (S : Set α) : S ⊆ S := fun x => x.property
+
+theorem subset_trans {S T U : Set α} (h₁ : S ⊆ T) (h₂ : T ⊆ U) : S ⊆ U := fun x => h₂ ⟨x.val, h₁ x⟩
+
 theorem subset_union_left {S T : Set α} : S ⊆ (S ∪ T) := fun x => Or.inl x.property
 theorem subset_union_right {S T : Set α} : T ⊆ (S ∪ T) := fun x => Or.inr x.property
+
+theorem ssubset_subset {S T : Set α} : S ⊂ T → S ⊆ T := And.right
+
+theorem ssubset_trans_subset {S T U : Set α} (h₁ : S ⊂ T) (h₂ : T ⊆ U) : S ⊂ U := by
+  constructor
+  . intro h
+    apply h₁.left
+    apply setext
+    intro y
+    apply Iff.intro
+    . intro h; exact h₁.right ⟨y, h⟩
+    . intro h'; rw [h]; exact h₂ ⟨y, h'⟩
+  . exact subset_trans h₁.right h₂
+
+theorem ssubset_trans {S T U : Set α} (h₁ : S ⊂ T) (h₂ : T ⊂ U) : S ⊂ U := ssubset_trans_subset h₁ h₂.right
+
+theorem union_symm {S T : Set α} : S ∪ T = T ∪ S := setext (S ∪ T) (T ∪ S) (fun _ => ⟨Or.symm, Or.symm⟩)
 
 theorem insert_as_union (S : Set α) (x : α) : insert x S = {x} ∪ S := rfl
 
@@ -155,6 +182,9 @@ theorem insert_into_union_right (x : α) (S T : Set α) : (insert x (S ∪ T)) =
       | Or.inl h₂ => exact Or.inl h₂
       | Or.inr h₂ => exact Or.inr (Or.inr h₂)
 
+theorem sub_subset (S T : Set α) : S - T ⊆ S := fun x => x.property.left
+theorem sub_disjoint (S T : Set α) : ∀ x : S - T, x.val ∉ T := fun x => x.property.right
+
 inductive Finite.{u} : Set α → Type u where
     | Empty : Finite ∅
     | Insert : {S : Set α} → (x : α) → Finite S → Finite (insert x S)
@@ -173,7 +203,7 @@ def Union {S T : Set α} (f₁ : Finite S) (f₂ : Finite T) : Finite (S ∪ T) 
     apply Finite.Insert
     exact Union f₁ f₃
 
-noncomputable def Intersection {T : Set α} (S : Set α) (f : Finite T) : Finite (S ∩ T) := match f with
+def Intersection {T : Set α} (S : Set α) [∀ x : α, Decidable (S.predicate x)] (f : Finite T) : Finite (S ∩ T) := match f with
   | Empty => by
     rw [←intersection_empty]
     exact Finite.Empty
@@ -222,11 +252,22 @@ end Finite
 def FiniteProp (S : Set α) := ∃ _ : Finite S, True
 
 namespace FiniteProp
-def Empty : FiniteProp (∅ : Set α) := ⟨Finite.Empty, trivial⟩
-def Insert {S : Set α} : (x : α) → FiniteProp S → FiniteProp (insert x S) := (⟨Finite.Insert · ·.choose, trivial⟩)
-def Singleton (x : α) : FiniteProp {x} := ⟨Finite.Singleton x, trivial⟩
-def Union {S T : Set α} : FiniteProp S → FiniteProp T → FiniteProp (S ∪ T) := (⟨Finite.Union ·.choose ·.choose, trivial⟩)
-def Intersection {T : Set α} : (S : Set α) → FiniteProp T → FiniteProp (S ∩ T) := (⟨Finite.Intersection · ·.choose, trivial⟩)
+theorem Empty : FiniteProp (∅ : Set α) := ⟨Finite.Empty, trivial⟩
+theorem Insert {S : Set α} : (x : α) → FiniteProp S → FiniteProp (insert x S) := (⟨Finite.Insert · ·.choose, trivial⟩)
+theorem Singleton (x : α) : FiniteProp {x} := ⟨Finite.Singleton x, trivial⟩
+theorem Union {S T : Set α} : FiniteProp S → FiniteProp T → FiniteProp (S ∪ T) := (⟨Finite.Union ·.choose ·.choose, trivial⟩)
+theorem Intersection {T : Set α} : (S : Set α) → FiniteProp T → FiniteProp (S ∩ T) := (⟨Finite.Intersection · ·.choose, trivial⟩)
+
+theorem Subset (S T : Set α) (h : S ⊆ T) (f : FiniteProp T) : FiniteProp S := by
+  have h₁ : S = (S ∩ T) := by
+    apply setext
+    intro x
+    apply Iff.intro
+    . intro h₂
+      exact ⟨h₂, h ⟨x, h₂⟩⟩
+    . exact And.left
+  rw [h₁]
+  exact Intersection S f
 end FiniteProp
 
 def max_rank_of_finite {S : Set α} (rank : α → Nat) (f : Finite S) : Nat := match f with
@@ -273,9 +314,170 @@ theorem infinite_sets_contain_element (S : Set α) (h : ¬ FiniteProp S) : ∃ _
   rw [h₃]
   exact FiniteProp.Empty
 
+theorem infinite_minus_singleton_infinite {S : Set α} (i : ¬ FiniteProp S) (x : S) : ¬ FiniteProp (S - {x.val}) := by
+  intro finite
+  have h₁ : S = (S - {x.val}) ∪ {x.val} := by
+    apply setext
+    intro y
+    apply Iff.intro
+    . intro h
+      cases em (y = x.val) with
+      | inl h_eq => exact Or.inr h_eq
+      | inr h_neq => exact Or.inl ⟨h, h_neq⟩
+    . intro h
+      cases h with
+      | inl h => exact h.left
+      | inr h => rw [h]; exact x.property
+  rw [h₁] at i
+  apply i
+  apply FiniteProp.Union
+  . exact finite
+  . rw [union_empty {x.val}]
+    exact FiniteProp.Insert x.val FiniteProp.Empty
+
+theorem infinite_of_infinite_subset {S : Set α} (i : ¬ FiniteProp S) (T : Set α) (h : S ⊆ T) : ¬ FiniteProp T := by
+  intro finite
+  have h₁ : FiniteProp S := FiniteProp.Subset S T h finite
+  exact i h₁
+
+def InfiniteSet (α : Type u) := {x : Set α // ¬ FiniteProp x}
+
+namespace _of_nat
+noncomputable def of_nat_with_remaining (S : InfiniteSet α) (n : Nat) : S.val × {T : InfiniteSet α // T.val ⊆ S.val} :=
+  let previous_remaining : {T : InfiniteSet α // T.val ⊆ S.val} := match n with
+    | 0 => ⟨S, subset_self S.val⟩
+    | k+1 => (of_nat_with_remaining S k).snd
+  let val : previous_remaining.val.val := (infinite_sets_contain_element previous_remaining.val.val previous_remaining.val.property).choose
+  have h₁ : val.val ∈ S.val := previous_remaining.property val
+  have h₂ : previous_remaining.val.val - {val.val} ⊆ S.val := subset_trans (sub_subset previous_remaining.val.val {val.val}) previous_remaining.property
+  have h₃ : ¬ FiniteProp (previous_remaining.val.val - {val.val}) := infinite_minus_singleton_infinite previous_remaining.val.property val
+  ⟨⟨val.val, h₁⟩, ⟨⟨previous_remaining.val.val - {val.val}, h₃⟩, h₂⟩⟩
+
+theorem of_nat_val_nin_remaining (S : InfiniteSet α) (n : Nat) : (of_nat_with_remaining S n).fst.val ∉ (of_nat_with_remaining S n).snd.val.val := by
+  let previous_remaining : {T : InfiniteSet α // T.val ⊆ S.val} := match n with
+    | 0 => ⟨S, subset_self S.val⟩
+    | k+1 => (of_nat_with_remaining S k).snd
+  let val : previous_remaining.val.val := (infinite_sets_contain_element previous_remaining.val.val previous_remaining.val.property).choose
+  unfold of_nat_with_remaining
+  show val.val ∉ previous_remaining.val.val - {val.val}
+  intro h
+  exact h.right rfl
+
+theorem of_nat_val_in_previous_remaining (S : InfiniteSet α) (n : Nat) : (of_nat_with_remaining S n.succ).fst.val ∈ (of_nat_with_remaining S n).snd.val.val := by
+  let previous_remaining := (of_nat_with_remaining S n).snd
+  show (infinite_sets_contain_element previous_remaining.val.val previous_remaining.val.property).choose.val ∈ previous_remaining.val.val
+  exact (infinite_sets_contain_element previous_remaining.val.val previous_remaining.val.property).choose.property
+
+theorem of_nat_remaining_subset_succ (S : InfiniteSet α) (n : Nat) : (of_nat_with_remaining S n.succ).snd.val.val ⊆ (of_nat_with_remaining S n).snd.val.val := by
+  let nth := of_nat_with_remaining S n
+  let succ_nth := of_nat_with_remaining S n.succ
+  show (nth.snd.val.val - {succ_nth.fst.val}) ⊆ nth.snd.val.val
+  exact sub_subset nth.snd.val.val {succ_nth.fst.val}
+
+theorem of_nat_remaining_ne_succ (S : InfiniteSet α) (n : Nat) : (of_nat_with_remaining S n).snd.val.val ≠ (of_nat_with_remaining S n.succ).snd.val.val := by
+  let previous_remaining := (of_nat_with_remaining S n).snd
+  intro h₁
+  have h₂ : (of_nat_with_remaining S n.succ).fst.val ∈ previous_remaining.val.val := of_nat_val_in_previous_remaining S n
+  have h₃ : (of_nat_with_remaining S n.succ).fst.val ∈ (of_nat_with_remaining S n.succ).snd.val.val := Eq.subst (motive := ((of_nat_with_remaining S n.succ).fst.val ∈ ·)) h₁ h₂
+  exact of_nat_val_nin_remaining S n.succ h₃
+
+theorem of_nat_remaining_ssubset_succ (S : InfiniteSet α) (n : Nat) : (of_nat_with_remaining S n.succ).snd.val.val ⊂ (of_nat_with_remaining S n).snd.val.val := ⟨(of_nat_remaining_ne_succ S n).symm, of_nat_remaining_subset_succ S n⟩
+
+theorem of_nat_remaining_ssubset_add (S : InfiniteSet α) (n k : Nat) : (of_nat_with_remaining S (n+k.succ)).snd.val.val ⊂ (of_nat_with_remaining S n).snd.val.val := match k with
+  | 0 => of_nat_remaining_ssubset_succ S n
+  | j+1 => by
+    have ih : (of_nat_with_remaining S (n+j.succ)).snd.val.val ⊂ (of_nat_with_remaining S n).snd.val.val := of_nat_remaining_ssubset_add S n j
+    have h₁ : (of_nat_with_remaining S (n+j.succ.succ)).snd.val.val ⊂ (of_nat_with_remaining S (n+j.succ)).snd.val.val := of_nat_remaining_ssubset_succ S (n+j.succ)
+    exact ssubset_trans h₁ ih
+
+theorem of_nat_remaining_ssubset_lt (S : InfiniteSet α) (a b : Nat) (h : a < b) : (of_nat_with_remaining S b).snd.val.val ⊂ (of_nat_with_remaining S a).snd.val.val := by
+  have ⟨k, h₁⟩ : ∃ k : Nat, b = a+k.succ := Nat.exists_eq_add_of_lt h
+  rw [h₁]
+  exact of_nat_remaining_ssubset_add S a k
+
+theorem of_nat_remaining_subset_le (S : InfiniteSet α) (a b : Nat) (h : a ≤ b) : (of_nat_with_remaining S b).snd.val.val ⊆ (of_nat_with_remaining S a).snd.val.val := by
+  match Nat.le_iff_lt_or_eq.mp h with
+  | Or.inr h_eq => rw [h_eq]; exact subset_self (of_nat_with_remaining S b).snd.val.val
+  | Or.inl h_lt => exact (of_nat_remaining_ssubset_lt S a b h_lt).right
+
+theorem of_nat_val_nin_remaining_le (S : InfiniteSet α) (a b : Nat) (h : a ≤ b) : (of_nat_with_remaining S a).fst.val ∉ (of_nat_with_remaining S b).snd.val.val := by
+  intro h'
+  have h₁ : (of_nat_with_remaining S b).snd.val.val ⊆ (of_nat_with_remaining S a).snd.val.val := of_nat_remaining_subset_le S a b h
+  have h₂ : (of_nat_with_remaining S a).fst.val ∈ (of_nat_with_remaining S a).snd.val.val := h₁ ⟨(of_nat_with_remaining S a).fst.val, h'⟩
+  exact of_nat_val_nin_remaining S a h₂
+
+theorem of_nat_val_in_remaining_gt (S : InfiniteSet α) (a b : Nat) (h :a > b) : (of_nat_with_remaining S a).fst.val ∈ (of_nat_with_remaining S b).snd.val.val := by
+  have ⟨k, h₁⟩ : ∃ k : Nat, a = k.succ := match a with
+    | 0 => False.elim (Nat.not_lt_zero b h)
+    | k+1 => ⟨k, rfl⟩
+  rw [h₁] at h
+  rw [h₁]
+  have h₂ : k ≥ b := Nat.le_of_lt_succ h
+  have h₃ : (of_nat_with_remaining S k).snd.val.val ⊆ (of_nat_with_remaining S b).snd.val.val := of_nat_remaining_subset_le S b k h₂
+  have h₄ : (of_nat_with_remaining S k.succ).fst.val ∈ (of_nat_with_remaining S k).snd.val.val := of_nat_val_in_previous_remaining S k
+  exact h₃ ⟨(of_nat_with_remaining S k.succ).fst.val, h₄⟩
+
+theorem of_nat_val_ne_lt (S : InfiniteSet α) (a b : Nat) (h : a < b) : (of_nat_with_remaining S a).fst.val ≠ (of_nat_with_remaining S b).fst.val := by
+  intro h'
+  apply of_nat_val_nin_remaining S a
+  rw [h']
+  exact of_nat_val_in_remaining_gt S b a h
+
+theorem of_nat_val_injective (S : InfiniteSet α) (a b : Nat) : (of_nat_with_remaining S a).fst.val = (of_nat_with_remaining S b).fst.val → a = b := by
+  intro h
+  apply byContradiction
+  intro h₁'
+  match Nat.ne_iff_lt_or_gt.mp h₁' with
+  | Or.inl h_lt => exact of_nat_val_ne_lt S a b h_lt h
+  | Or.inr h_gt => exact of_nat_val_ne_lt S b a h_gt h.symm
+
+noncomputable def of_rank (S : InfiniteSet α) (n : Nat) : S.val := (of_nat_with_remaining S n).fst
+
+theorem of_rank_injective (S : InfiniteSet α) (a b : Nat) : of_rank S a = of_rank S b → a = b := by
+  intro h
+  have h₁ : (of_nat_with_remaining S a).fst.val = (of_nat_with_remaining S b).fst.val := congrArg Subtype.val h
+  exact of_nat_val_injective S a b h₁
+
+noncomputable def rank (S : InfiniteSet α) (x : S.val) : Nat :=
+  if h : ∃ n : Nat, x = of_rank S n then
+    h.choose
+  else
+    0
+
+theorem rank_of_rank (S : InfiniteSet α) (n : Nat) : rank S (of_rank S n) = n := by
+  unfold rank
+  have h₁ : ∃ m : Nat, of_rank S n = of_rank S m := ⟨n, rfl⟩
+  split
+  . show h₁.choose = n
+    exact of_rank_injective S h₁.choose n h₁.choose_spec.symm
+  . contradiction
+end _of_nat
+
+theorem infinite_iff_surjective_to_nat (S : Set α) : ¬ FiniteProp S ↔ ∃ f : S → Nat, ∀ n : Nat, ∃ x : S, n = f x := by
+  apply Iff.intro
+  . intro h
+    let f := _of_nat.rank ⟨S, h⟩
+    apply Exists.intro f
+    intro n
+    let x := _of_nat.of_rank ⟨S, h⟩ n
+    apply Exists.intro x
+    exact (_of_nat.rank_of_rank ⟨S, h⟩ n).symm
+  . intro h
+    let rank : α → Nat := fun x => if h' : x ∈ S then h.choose ⟨x, h'⟩ else 0
+    let of_rank : Nat → S := fun n => (h.choose_spec n).choose
+    apply all_of_unbounded_infinite rank of_rank
+    intro n
+    apply Nat.le_of_eq
+    have h₁ : (of_rank n).val ∈ S := (of_rank n).property
+    unfold rank
+    split
+    . exact (h.choose_spec n).choose_spec
+    . contradiction
+
 def equalCardinality {α : Type u} {β : Type v} (S : Set α) (T : Set β) : Prop :=   ∃ f : S → T, (∀ x₁ x₂, f x₁ = f x₂ → x₁ = x₂) ∧ (∀ y, ∃ x, f x = y)
 
 theorem equal_cardinality_refl {S : Set α} : equalCardinality S S := ⟨id, fun _ _ h => h, fun x => ⟨x, rfl⟩⟩
+
 theorem equal_cardinality_symm {S : Set α} {T : Set β} (h : equalCardinality S T) : equalCardinality T S := by
   have ⟨f, h₁, h₂⟩ := h
   let g : T → S := fun y => (h₂ y).choose
@@ -489,39 +691,31 @@ theorem nats_bounded_below (S : Set Nat) (sample_value : Nat) (h : S.predicate s
   have ⟨m, _⟩ : ∃ m : S, m < sample_value := h' ⟨sample_value, h⟩
   exact nats_bounded_below S m.val m.property h'
 
-theorem nats_bounded_above_finite (S : Set Nat) (n : Nat) (h : ∀ m : S, m < n) : FiniteProp S := match n with
+theorem all_nats_below_n_finite (n : Nat) : FiniteProp (Set.mk fun m => m < n) :=
+  match n with
   | 0 => by
-    have h₁ : ∀ m : Nat, m ∉ S := fun m h' => Nat.not_lt_zero m (h ⟨m, h'⟩)
+    let S := Set.mk fun m => m < 0
+    show FiniteProp S
+    have h₁ : ∀ m : Nat, m ∉ S := fun m h => Nat.not_lt_zero m (h : S.predicate m)
     have h₂ : ∀ m : Nat, m ∈ S ↔ False := fun m => ⟨h₁ m, False.elim⟩
     have h₃ : S = ∅ := setext S ∅ h₂
     rw [h₃]
     exact FiniteProp.Empty
   | k+1 => by
-    cases (em (k ∈ S)) with
-    | inr h_false =>
-      have h₄ : ∀ m : S, m.val ≠ k := fun m h => h_false (Eq.subst h m.property)
-      have h₅ : ∀ m : S, m ≤ k := fun m => Nat.le_of_lt_add_one (h m)
-      have h₆ : ∀ m : S, m < k := fun m => (Nat.le_iff_lt_or_eq.mp (h₅ m)).resolve_right (h₄ m)
-      exact nats_bounded_above_finite S k h₆
-    | inl h_true =>
-      let S_without_k : Set Nat := Set.mk (fun m => S.predicate m ∧ m ≠ k)
-      have h₇ : ∀ m : S_without_k, m.val ≠ k := fun m => m.property.right
-      have h₈ : ∀ m : S_without_k, m < k+1 := fun m => h ⟨m.val, m.property.left⟩
-      have h₉ : ∀ m : S_without_k, m ≤ k := fun m => Nat.le_of_lt_add_one (h₈ m)
-      have h₁₀ : ∀ m : S_without_k, m < k := fun m => (Nat.le_iff_lt_or_eq.mp (h₉ m)).resolve_right (h₇ m)
-      have h₁₁ : FiniteProp S_without_k := nats_bounded_above_finite S_without_k k h₁₀
-      suffices S = S_without_k ∪ {k} from Eq.subst this.symm (FiniteProp.Union h₁₁ (FiniteProp.Singleton k))
-      apply setext S (S_without_k ∪ {k})
-      intro r
-      apply Iff.intro
-      . intro h₁₂
-        cases (em (r = k)) with
-        | inl h => exact Or.inr h
-        | inr h => exact Or.inl ⟨h₁₂, h⟩
-      . intro h₁₃
-        cases h₁₃ with
-        | inl h => exact h.left
-        | inr h => rw [h]; assumption
+    let S := Set.mk fun m => m < k+1
+    let T := Set.mk fun m => m < k
+    show FiniteProp S
+    have ih : FiniteProp T := all_nats_below_n_finite k
+    have h₁ : ∀ m : Nat, m < k+1 ↔ m < k ∨ m = k := fun m => Iff.trans Nat.lt_succ Nat.le_iff_lt_or_eq
+    have h₂ : S = T ∪ {k} := setext S (T ∪ {k}) h₁
+    rw [h₂, union_symm]
+    exact FiniteProp.Insert k ih
+
+theorem nats_bounded_above_finite (S : Set Nat) (n : Nat) (h : ∀ m : S, m < n) : FiniteProp S := by
+  have h₁ : S ⊆ (Set.mk fun m => m < n) := h
+  apply FiniteProp.Subset
+  apply h₁
+  exact all_nats_below_n_finite n
 
 theorem infinite_nats_unbounded_above (S : Set Nat) (h : ¬ FiniteProp S) : ∀ n : Nat, ∃ m : S, m > n := by
   intro n
