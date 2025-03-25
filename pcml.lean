@@ -507,6 +507,21 @@ theorem equal_cardinality_trans {S : Set α} {T : Set β} {U : Set γ} (h'₁ : 
     have h₇ : g (f x) = z := Eq.subst (motive := fun a => g a = z) h₆.symm h₅
     exact ⟨x, h₇⟩
 
+theorem infinite_equal_cardonality_infinite {S : Set α} {T : Set β} (h : equalCardinality S T) : ¬ FiniteProp S → ¬ FiniteProp T := by
+  have h' : equalCardinality T S := equal_cardinality_symm h
+  intro h₁
+  have ⟨f₁, h₂⟩ : ∃ f : S → Nat, ∀ n : Nat, ∃ x : S, n = f x := (infinite_iff_surjective_to_nat S).mp h₁
+  have ⟨f₂, h₃⟩ : ∃ f : T → S, ∀ y : S, ∃ x : T, f x = y := ⟨h'.choose, h'.choose_spec.right⟩
+  let f₃ : T → Nat := f₁ ∘ f₂
+  apply (infinite_iff_surjective_to_nat T).mpr
+  apply Exists.intro f₃
+  intro n
+  let x : T := (h₃ (h₂ n).choose).choose
+  apply Exists.intro x
+  show n = f₁ (f₂ x)
+  rw [(h₃ (h₂ n).choose).choose_spec]
+  exact (h₂ n).choose_spec
+
 def Countable (S : Set α) : Prop := ∃ f : S → Nat, ∀ x₁ x₂ : S, f x₁ = f x₂ → x₁ = x₂
 
 namespace Countable
@@ -861,12 +876,33 @@ theorem nth_of_infinite_surjective {S : Set Nat} (h_f : ¬ FiniteProp S) : ∀ y
 
 theorem infinite_nats_equal_cardonality_all_nats {S : Set Nat} (h_f : ¬ FiniteProp S) : equalCardinality (All Nat) S := ⟨fun x => nth_of_infinite h_f x.val, fun x₁ x₂ h => Subtype.eq (nth_of_infinite_injective h_f x₁.val x₂.val h), fun y => ⟨⟨(nth_of_infinite_surjective h_f y).choose, trivial⟩, (nth_of_infinite_surjective h_f y).choose_spec⟩⟩
 
-theorem image_of_infinite_countable_infinite {S : CountableSet} (h_f : ¬ FiniteProp S.val) : ¬ FiniteProp (Set.mk fun n => ∃ x : S.val, n = S.property.choose x) := by
-  intro finite
+theorem countable_equal_cardinality_image (S : CountableSet) : equalCardinality S.val (Set.mk fun n => ∃ x : S.val, n = S.property.choose x) := by
   let T := Set.mk fun n => ∃ x : S.val, n = S.property.choose x
-  let maximum := max_rank_of_finite id finite.choose
-  have h₀ : ∀x : T, maximum ≥ x := max_rank_of_finite_ge_all id finite.choose
-  sorry
+  show equalCardinality S.val T
+  let f : S.val → T := fun x => ⟨S.property.choose x, ⟨x, rfl⟩⟩
+  apply Exists.intro f
+  constructor
+  . intro x₁ x₂ h₁
+    have h₁' : (f x₁).val = (f x₂).val := congrArg Subtype.val h₁
+    exact S.property.choose_spec x₁ x₂ h₁'
+  . intro y
+    apply Exists.intro y.property.choose
+    apply Subtype.eq
+    exact y.property.choose_spec.symm
+
+theorem image_of_infinite_countable_infinite {S : CountableSet} (h_f : ¬ FiniteProp S.val) : ¬ FiniteProp (Set.mk fun n => ∃ x : S.val, n = S.property.choose x) := by
+  apply infinite_equal_cardonality_infinite
+  . exact countable_equal_cardinality_image S
+  . exact h_f
+
+theorem infinite_countable_equal_cardinality_all_nats {S : CountableSet} (h_f : ¬ FiniteProp S.val) : equalCardinality S.val (All Nat) := by
+  let T : Set Nat := Set.mk fun n => ∃ x : S.val, n = S.property.choose x
+  apply equal_cardinality_trans
+  . show equalCardinality S.val T
+    exact countable_equal_cardinality_image S
+  . have h₁ : ¬ FiniteProp T := image_of_infinite_countable_infinite h_f
+    apply equal_cardinality_symm
+    exact infinite_nats_equal_cardonality_all_nats h₁
 end Countable
 end Set
 
