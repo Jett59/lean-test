@@ -185,7 +185,7 @@ theorem insert_into_union_right (x : α) (S T : Set α) : (insert x (S ∪ T)) =
 theorem sub_subset (S T : Set α) : S - T ⊆ S := fun x => x.property.left
 theorem sub_disjoint (S T : Set α) : ∀ x : S - T, x.val ∉ T := fun x => x.property.right
 
-inductive Finite.{u} : Set α → Type u where
+inductive Finite : Set α → Type u where
     | Empty : Finite ∅
     | Insert : {S : Set α} → (x : α) → Finite S → Finite (insert x S)
 
@@ -1975,11 +1975,18 @@ theorem consistent_including_base_consistent (B : Set Proposition) (h : consiste
     let n_of_element : B₁ → Nat := fun p => (h₁ p).choose
     have h₃ : ∀ p : B₁, p.val ∈ (consistent_propositions_up_to_n_including_base (n_of_element p) B h).val := fun p => (h₁ p).choose_spec
     have ⟨max, h_max⟩ : ∃ p : B₁, ∀ q : B₁, n_of_element q ≤ n_of_element p := max_of_finite_exists h₂.choose h_nonempty n_of_element
-    have h₄ : B₁ ⊆ (consistent_propositions_up_to_n_including_base (n_of_element max) B₁ h) := by
+    have h₄ : B₁ ⊆ (consistent_propositions_up_to_n_including_base (n_of_element max) B h) := by
       intro p
-      exact consistent_propositions_up_to_n_subset_le (n_of_element p) (n_of_element max)
+      exact consistent_propositions_up_to_n_subset_le (n_of_element p) (n_of_element max) B h (h_max p) ⟨p, h₃ p⟩
+    exact subset_consistent h₄ (consistent_propositions_up_to_n_including_base (n_of_element max) B h).property
   end maximally_consistent_superset
 
---theorem maximally_consistent_superset {A : Set Proposition} (h : consistent A) : ∃ B : Set Proposition, A ⊆ B ∧ maximallyConsistent B := sorry
+theorem maximally_consistent_superset {A : Set Proposition} (h : consistent A) : ∃ B : Set Proposition, A ⊆ B ∧ maximallyConsistent B := by
+  apply Exists.intro (maximally_consistent_superset.consistent_including_base A h)
+  constructor
+  . exact maximally_consistent_superset.consistent_includes_base A h
+  . constructor
+    . exact maximally_consistent_superset.consistent_including_base_consistent A h
+    . exact maximally_consistent_superset.nin_consistent_including_Bae_inconsistent A h
 end SoundAndComplete
 end propositional
