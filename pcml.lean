@@ -103,7 +103,7 @@ theorem empty_subset {A : Set α} : ∅ ⊆ A := by
     intro x
     exact False.elim x.property
 
-theorem insert_member {A : Set α} {x : A} : insert x.val A = A := by
+theorem insert_member {A : Set α} (x : A) : insert x.val A = A := by
     apply setext
     intro y
     apply Iff.intro
@@ -522,6 +522,45 @@ theorem infinite_equal_cardonality_infinite {S : Set α} {T : Set β} (h : equal
   rw [(h₃ (h₂ n).choose).choose_spec]
   exact (h₂ n).choose_spec
 
+theorem max_of_finite_exists {S : Set α} (finite : Finite S) (h : Nonempty S) (f : S → Nat) : ∃ x : S, ∀ y : S, f y ≤ f x := by
+  cases finite with
+  | Empty => exact False.elim (h.elim Subtype.property)
+  | @Insert T x f_t =>
+    match em (Nonempty T) with
+    | Or.inr h_false =>
+      apply Exists.intro ⟨x, Or.inl rfl⟩
+      intro y
+      have h₁ : y = ⟨x, Or.inl rfl⟩ := match y.property with
+        | Or.inl eq => Subtype.eq eq
+        | Or.inr h => False.elim (h_false ⟨y.val, h⟩)
+      rw [h₁]
+      exact Nat.le_refl (f ⟨x, Or.inl rfl⟩)
+    | Or.inl h_true =>
+      let g : T → Nat := fun x => f ⟨x.val, Or.inr x.property⟩
+      have ⟨old_max, h₁⟩ : ∃ x : T, ∀ y : T, g y ≤ g x := max_of_finite_exists f_t h_true g
+      match em (f ⟨x, Or.inl rfl⟩ ≤ f ⟨old_max.val, Or.inr old_max.property⟩) with
+      | Or.inl h_le =>
+        apply Exists.intro ⟨old_max.val, Or.inr old_max.property⟩
+        intro y
+        match y.property with
+        | Or.inl h_eq =>
+          have h₂ : y = ⟨x, Or.inl rfl⟩ := Subtype.eq h_eq
+          rw [h₂]
+          exact h_le
+        | Or.inr h_in => exact h₁ ⟨y.val, h_in⟩
+      | Or.inr h_nle =>
+        have h₂ : f ⟨old_max.val, Or.inr old_max.property⟩ < f ⟨x, Or.inl rfl⟩ := Nat.not_le.mp h_nle
+        apply Exists.intro ⟨x, Or.inl rfl⟩
+        intro y
+        match y.property with
+        | Or.inl h_eq =>
+          have h₃ : y = ⟨x, Or.inl rfl⟩ := Subtype.eq h_eq
+          rw [h₃]
+          exact Nat.le_refl (f ⟨x, Or.inl rfl⟩)
+        | Or.inr h_in =>
+          have h₃ : f ⟨y.val, Or.inr h_in⟩ ≤ f ⟨old_max.val, Or.inr old_max.property⟩ := h₁ ⟨y.val, h_in⟩
+          exact Nat.le_trans h₃ (Nat.le_of_lt h₂)
+
 def Countable (S : Set α) : Prop := ∃ f : S → Nat, ∀ x₁ x₂ : S, f x₁ = f x₂ → x₁ = x₂
 
 namespace Countable
@@ -895,7 +934,7 @@ theorem image_of_infinite_countable_infinite {S : CountableSet} (h_f : ¬ Finite
   . exact countable_equal_cardinality_image S
   . exact h_f
 
-theorem infinite_countable_equal_cardinality_all_nats {S : CountableSet} (h_f : ¬ FiniteProp S.val) : equalCardinality S.val (All Nat) := by
+theorem infinite_countable_equal_cardinality_all_nats (S : CountableSet) (h_f : ¬ FiniteProp S.val) : equalCardinality S.val (All Nat) := by
   let T : Set Nat := Set.mk fun n => ∃ x : S.val, n = S.property.choose x
   apply equal_cardinality_trans
   . show equalCardinality S.val T
@@ -904,6 +943,20 @@ theorem infinite_countable_equal_cardinality_all_nats {S : CountableSet} (h_f : 
     apply equal_cardinality_symm
     exact infinite_nats_equal_cardonality_all_nats h₁
 end Countable
+
+theorem all_equal_cardinality_all_bijection (h : equalCardinality (All α) (All β)) : ∃ f : α → β, (∀ (x₁ x₂ : α), f x₁ = f x₂ → x₁ = x₂) ∧ ∀ y : β, ∃ x : α, f x = y := by
+  let f : α → β := fun x => (h.choose ⟨x, trivial⟩).val
+  apply Exists.intro f
+  constructor
+  . intro x₁ x₂ h₀
+    have h₁ : h.choose ⟨x₁, trivial⟩ = h.choose ⟨x₂, trivial⟩ := Subtype.eq h₀
+    have h₂ : (⟨x₁, trivial⟩ : All α) = ⟨x₂, trivial⟩ := h.choose_spec.left ⟨x₁, trivial⟩ ⟨x₂, trivial⟩ h₁
+    exact Subtype.eq_iff.mp h₂
+  . intro y
+    let x : α := (h.choose_spec.right ⟨y, trivial⟩).choose.val
+    apply Exists.intro x
+    have h₁ : h.choose (h.choose_spec.right ⟨y, trivial⟩).choose = ⟨y, trivial⟩ := (h.choose_spec.right ⟨y, trivial⟩).choose_spec
+    exact Subtype.eq_iff.mp h₁
 end Set
 
 namespace propositional
@@ -1492,6 +1545,19 @@ theorem p_implies_p_tautology (p : Proposition) : Tautology (p.Implies p) := by
         _ = TruthValue.True := match vp with
         | TruthValue.True => rfl
         | TruthValue.False => rfl
+
+namespace exists_valuation
+def function : Proposition → TruthValue := fun p => match p with
+    | Proposition.Atomic _ => TruthValue.False
+    | Proposition.Not p => (function p).Not
+    | Proposition.Implies p q => (function p).Implies (function q)
+end exists_valuation
+
+theorem exists_valuation : Nonempty Valuation := Nonempty.intro {
+  function := exists_valuation.function
+  negation := fun _ => rfl
+  implication := fun _ _ => rfl
+}
 end Valuation
 
 -- I would make this a Prop (see Deduction.proves), but you apparently can't do structural recursion on a Prop
@@ -1660,6 +1726,12 @@ theorem satisfiable_consistent {A : Set Proposition} : satisfiable_set A → con
     . exact (tautology_contradiction (p.Implies p)).mp (Valuation.p_implies_p_tautology p)
     . exact h₃
 
+theorem empty_consistent : consistent ∅ := by
+  apply satisfiable_consistent
+  apply Exists.intro (choice exists_valuation)
+  intro y
+  exact False.elim y.property
+
 theorem generalised_explosion {A : Set Proposition} {p q : Proposition} (h₁ : A ⊢ p) (h₂ : A ⊢ p.Not) : A ⊢ q :=
     have h₃ : A ⊢ q.Not.Implies p.Not := p_implies_provable h₂
     have h₄ : A ⊢ q.Not.Implies p := p_implies_provable h₁
@@ -1717,6 +1789,12 @@ theorem finite_subsets_consistent {A : Set Proposition} : consistent A ↔ ∀ B
 theorem inconsistent_subset {A B : Set Proposition} (h₀ : A ⊆ B) : inconsistent A → inconsistent B := by
     intro ⟨p, h₁⟩
     exact ⟨p, subset_proves h₀ h₁.choose⟩
+
+theorem subset_consistent {A B : Set Proposition} (h₀ : A ⊆ B) : consistent B → consistent A := by
+  intro h₁
+  intro h'
+  have h₂ : inconsistent B := inconsistent_subset h₀ h'
+  contradiction
 
 theorem proves_assumption {A : Set Proposition} {p : Proposition} (h₀ : A ⊢ p) : ∀ q : Proposition, insert p A ⊢ q ↔ A ⊢ q := by
     intro q
@@ -1794,6 +1872,113 @@ theorem maximally_consistent_includes_implication {A : Set Proposition} {p q : P
         have h₄ : (insert p A) ⊢ q := generalised_explosion h₂ h₃
         exact deduction_theorem.mpr h₄
       . intro h₀; exact maximally_consistent_proves h (p_implies_provable (Premiss_proves h₀))
+
+namespace maximally_consistent_superset
+theorem nats_bijective_propositions : ∃ f : Nat → Proposition, (∀ x₁ x₂, f x₁ = f x₂ → x₁ = x₂) ∧ ∀ y, ∃ x, f x = y := all_equal_cardinality_all_bijection (equal_cardinality_symm (Countable.infinite_countable_equal_cardinality_all_nats (Countable.CountableSet.All Proposition propositions_countable) propositions_infinite))
+
+noncomputable def consistent_propositions_up_to_n_including_base (n : Nat) ( B : Set Proposition) (h : consistent B) : {A : Set Proposition // consistent A} := match n with
+  | 0 => ⟨B, h⟩
+  | k+1 =>
+    let C := insert (nats_bijective_propositions.choose k) (consistent_propositions_up_to_n_including_base k B h).val
+    if h' : consistent C then ⟨C, h'⟩ else consistent_propositions_up_to_n_including_base k B h
+
+theorem consistent_propositions_up_to_0_is_base (B : Set Proposition) (h : consistent B) : (consistent_propositions_up_to_n_including_base 0 B h).val = B := rfl
+
+theorem consistent_propositions_up_to_n_subset_succ_n (n : Nat) (B : Set Proposition) (h : consistent B) : (consistent_propositions_up_to_n_including_base n B h).val ⊆ (consistent_propositions_up_to_n_including_base n.succ B h).val := by
+  intro ⟨p, h₁⟩
+  let C := insert (nats_bijective_propositions.choose n) (consistent_propositions_up_to_n_including_base n B h).val
+  show p ∈ (if h' : consistent C then ⟨C, h'⟩ else consistent_propositions_up_to_n_including_base n B h).val
+  split
+  . show p ∈ C
+    exact Or.inr h₁
+  . exact h₁
+
+theorem consistent_propositions_up_to_n_subset_n_plus_k_succ (n : Nat) (B : Set Proposition) (h : consistent B) (k : Nat) : (consistent_propositions_up_to_n_including_base n B h).val ⊆ (consistent_propositions_up_to_n_including_base (n+k.succ) B h).val := by
+  match k with
+  | 0 => exact consistent_propositions_up_to_n_subset_succ_n n B h
+  | j+1 => exact subset_trans (consistent_propositions_up_to_n_subset_n_plus_k_succ n B h j) (consistent_propositions_up_to_n_subset_succ_n (n+j.succ) B h)
+
+theorem consistent_propositions_up_to_n_subset_le (m n : Nat) (B : Set Proposition) (h₁ : consistent B) (h₂ : m ≤ n) : (consistent_propositions_up_to_n_including_base m B h₁).val ⊆ (consistent_propositions_up_to_n_including_base n B h₁).val := by
+  match Nat.le_iff_lt_or_eq.mp h₂ with
+  | Or.inr h_eq =>
+    rw [h_eq]
+    exact subset_self _
+  | Or.inl h_lt =>
+    have ⟨k, h₃⟩ : ∃ k : Nat, n = m+k.succ := Nat.exists_eq_add_of_lt h_lt
+    rw [h₃]
+    exact consistent_propositions_up_to_n_subset_n_plus_k_succ m B h₁ k
+
+theorem consistent_propositions_up_to_n_includes_base (n : Nat) (B : Set Proposition) (h : consistent B) : B ⊆ (consistent_propositions_up_to_n_including_base n B h) :=
+  consistent_propositions_up_to_n_subset_le 0 n B h (Nat.zero_le n)
+
+theorem consistent_propositions_up_to_succ_n_includes_n_iff_consistent (n : Nat) (B : Set Proposition) (h : consistent B) : nats_bijective_propositions.choose n ∈ (consistent_propositions_up_to_n_including_base n.succ B h).val ↔ consistent (insert (nats_bijective_propositions.choose n) (consistent_propositions_up_to_n_including_base n B h)) := by
+  let p := nats_bijective_propositions.choose n
+  let C := insert p (consistent_propositions_up_to_n_including_base n B h).val
+  apply Iff.intro
+  . intro (h₁ : p ∈ (if h' : consistent C then ⟨C, h'⟩ else consistent_propositions_up_to_n_including_base n B h).val)
+    match propDecidable (consistent C) with
+    | isTrue h₂ => exact h₂
+    | isFalse h₂ =>
+      simp [h₂] at h₁
+      have h₃ : C = (consistent_propositions_up_to_n_including_base n B h).val := insert_member ⟨p, h₁⟩
+      show consistent C
+      rw [h₃]
+      exact (consistent_propositions_up_to_n_including_base n B h).property
+  . intro h₁
+    show p ∈ (if h' : consistent C then ⟨C, h'⟩ else consistent_propositions_up_to_n_including_base n B h).val
+    split
+    . exact Or.inl rfl
+    . contradiction
+
+def consistent_including_base (B : Set Proposition) (h : consistent B) : Set Proposition := Set.mk fun p => ∃ n : Nat, p ∈ (consistent_propositions_up_to_n_including_base n B h).val
+
+theorem consistent_includes_base (B : Set Proposition) (h : consistent B) : B ⊆ consistent_including_base B h := by
+  intro p
+  apply Exists.intro 0
+  rw [consistent_propositions_up_to_0_is_base]
+  exact p.property
+
+theorem consistent_propositions_up_to_n_subset_consistent_including_base (n : Nat) (B : Set Proposition) (h : consistent B) : (consistent_propositions_up_to_n_including_base n B h).val ⊆ consistent_including_base B h := by
+  intro p
+  apply Exists.intro n
+  exact p.property
+
+theorem nin_consistent_including_Bae_inconsistent (B : Set Proposition) (h : consistent B) (p : Proposition) : p ∉ consistent_including_base B h → inconsistent (insert p (consistent_including_base B h)) := by
+  intro h₁
+  apply byContradiction
+  intro h₂
+  let n : Nat := (nats_bijective_propositions.choose_spec.right p).choose
+  have h₃ : nats_bijective_propositions.choose n = p := (nats_bijective_propositions.choose_spec.right p).choose_spec
+  rw [←h₃] at h₁ h₂
+  have h₄ : insert (nats_bijective_propositions.choose n) (consistent_propositions_up_to_n_including_base n B h).val ⊆ insert (nats_bijective_propositions.choose n) (consistent_including_base B h) := fun q => match q.property with
+    | Or.inl h_eq => Or.inl h_eq
+    | Or.inr h_in => Or.inr (consistent_propositions_up_to_n_subset_consistent_including_base n B h ⟨q.val, h_in⟩)
+  have h₅ : consistent (insert (nats_bijective_propositions.choose n) (consistent_propositions_up_to_n_including_base n B h).val) := subset_consistent h₄ h₂
+  have h₆ : nats_bijective_propositions.choose n ∈ (consistent_propositions_up_to_n_including_base n.succ B h).val := (consistent_propositions_up_to_succ_n_includes_n_iff_consistent n B h).mpr h₅
+  have h₇ : nats_bijective_propositions.choose n ∈ consistent_including_base B h := consistent_propositions_up_to_n_subset_consistent_including_base n.succ B h ⟨nats_bijective_propositions.choose n, h₆⟩
+  contradiction
+
+theorem consistent_including_base_consistent (B : Set Proposition) (h : consistent B) : consistent (consistent_including_base B h) := by
+  apply finite_subsets_consistent.mpr
+  intro B₁ h₁ h₂
+  match em (Nonempty B₁) with
+  | Or.inr h_empty =>
+    have h₁ : B₁ = ∅ := by
+      apply setext
+      intro x
+      apply Iff.intro
+      . intro h; exact h_empty ⟨x, h⟩
+      . intro h; contradiction
+    rw [h₁]
+    exact empty_consistent
+  | Or.inl h_nonempty =>
+    let n_of_element : B₁ → Nat := fun p => (h₁ p).choose
+    have h₃ : ∀ p : B₁, p.val ∈ (consistent_propositions_up_to_n_including_base (n_of_element p) B h).val := fun p => (h₁ p).choose_spec
+    have ⟨max, h_max⟩ : ∃ p : B₁, ∀ q : B₁, n_of_element q ≤ n_of_element p := max_of_finite_exists h₂.choose h_nonempty n_of_element
+    have h₄ : B₁ ⊆ (consistent_propositions_up_to_n_including_base (n_of_element max) B₁ h) := by
+      intro p
+      exact consistent_propositions_up_to_n_subset_le (n_of_element p) (n_of_element max)
+  end maximally_consistent_superset
 
 --theorem maximally_consistent_superset {A : Set Proposition} (h : consistent A) : ∃ B : Set Proposition, A ⊆ B ∧ maximallyConsistent B := sorry
 end SoundAndComplete
